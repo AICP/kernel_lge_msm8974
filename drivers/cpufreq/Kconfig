@@ -125,7 +125,14 @@ config CPU_FREQ_DEFAULT_GOV_INTELLIACTIVE
 	  loading your cpufreq low-level hardware driver, using the
 	  'interactive' governor for latency-sensitive workloads.
 
+config CPU_FREQ_DEFAULT_GOV_DANCEDANCE
+	bool "interactive"
+	select CPU_FREQ_GOV_DANCEDANCE
+
 endchoice
+
+config CPU_FREQ_GOV_DANCEDANCE
+	tristate "'DanceDance' governor"
 
 config CPU_FREQ_GOV_PERFORMANCE
 	tristate "'performance' governor"
