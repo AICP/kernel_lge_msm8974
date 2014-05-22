@@ -43,13 +43,17 @@
 #define QCE_MAX_NUM_DSCR    0x500
 #define QCE_SECTOR_SIZE	    0x200
 
-static DEFINE_MUTEX(bam_register_cnt);
+static DEFINE_MUTEX(bam_register_lock);
 struct bam_registration_info {
+	struct list_head qlist;
 	uint32_t handle;
 	uint32_t cnt;
+	uint32_t bam_mem;
+	void __iomem *bam_iobase;
+	bool support_cmd_dscr;
 };
-static struct bam_registration_info bam_registry;
-static bool ce_bam_registered;
+static LIST_HEAD(qce50_bam_list);
+
 /*
  * CE HW device structure.
  * Each engine has an instance of the structure.
@@ -58,11 +62,14 @@ static bool ce_bam_registered;
  */
 struct qce_device {
 	struct device *pdev;        /* Handle to platform_device structure */
+	struct bam_registration_info *pbam;
 
 	unsigned char *coh_vmem;    /* Allocated coherent virtual memory */
 	dma_addr_t coh_pmem;	    /* Allocated coherent physical memory */
 	int memsize;				/* Memory allocated */
-	int is_shared;				/* CE HW is shared */
+	uint32_t bam_mem;		/* bam physical address, from DT */
+	uint32_t bam_mem_size;		/* bam io size, from DT */
+	int is_shared;			/* CE HW is shared */
 	bool support_cmd_dscr;
 	bool support_hw_key;
 
@@ -188,12 +195,7 @@ static int _probe_ce_engine(struct qce_device *pce_dev)
 	min_rev = (rev & CRYPTO_CORE_MINOR_REV_MASK) >> CRYPTO_CORE_MINOR_REV;
 	step_rev = (rev & CRYPTO_CORE_STEP_REV_MASK) >> CRYPTO_CORE_STEP_REV;
 
-	if ((maj_rev != 0x05) || (min_rev > 0x02) || (step_rev > 0x02)) {
-		pr_err("Unknown Qualcomm crypto device at 0x%x, rev %d.%d.%d\n",
-			pce_dev->phy_iobase, maj_rev, min_rev, step_rev);
-		return -EIO;
-	};
-	if ((min_rev > 0)  && (step_rev != 0)) {
+	if (maj_rev != 0x05) {
 		pr_err("Unknown Qualcomm crypto device at 0x%x, rev %d.%d.%d\n",
 			pce_dev->phy_iobase, maj_rev, min_rev, step_rev);
 		return -EIO;
@@ -645,9 +647,6 @@ static int _ce_setup_cipher(struct qce_device *pce_dev, struct qce_req *creq,
 	else
 		key_size = creq->encklen;
 
-	_byte_stream_to_net_words(enckey32, creq->enckey, key_size);
-	enck_size_in_word = key_size/sizeof(uint32_t);
-
 	pce = cmdlistinfo->go_proc;
 	if ((creq->flags & QCRYPTO_CTX_USE_HW_KEY) == QCRYPTO_CTX_USE_HW_KEY) {
 		use_hw_key = true;
@@ -663,6 +662,10 @@ static int _ce_setup_cipher(struct qce_device *pce_dev, struct qce_req *creq,
 	else
 		pce->addr = (uint32_t)(CRYPTO_GOPROC_REG +
 						pce_dev->phy_iobase);
+	if ((use_pipe_key == false) && (use_hw_key == false)) {
+		_byte_stream_to_net_words(enckey32, creq->enckey, key_size);
+		enck_size_in_word = key_size/sizeof(uint32_t);
+	}
 
 	if ((creq->op == QCE_REQ_AEAD) && (creq->mode == QCE_MODE_CCM)) {
 		uint32_t authklen32 = creq->encklen/sizeof(uint32_t);
@@ -1282,9 +1285,6 @@ static int _ce_setup_cipher_direct(struct qce_device *pce_dev,
 	else
 		key_size = creq->encklen;
 
-	_byte_stream_to_net_words(enckey32, creq->enckey, key_size);
-
-	enck_size_in_word = key_size/sizeof(uint32_t);
 	if ((creq->flags & QCRYPTO_CTX_USE_HW_KEY) == QCRYPTO_CTX_USE_HW_KEY) {
 		use_hw_key = true;
 	} else {
@@ -1292,7 +1292,10 @@ static int _ce_setup_cipher_direct(struct qce_device *pce_dev,
 					QCRYPTO_CTX_USE_PIPE_KEY)
 			use_pipe_key = true;
 	}
-
+	if ((use_pipe_key == false) && (use_hw_key == false)) {
+		_byte_stream_to_net_words(enckey32, creq->enckey, key_size);
+		enck_size_in_word = key_size/sizeof(uint32_t);
+	}
 	if ((creq->op == QCE_REQ_AEAD) && (creq->mode == QCE_MODE_CCM)) {
 		uint32_t authklen32 = creq->encklen/sizeof(uint32_t);
 		uint32_t noncelen32 = MAX_NONCE/sizeof(uint32_t);
@@ -2166,25 +2169,93 @@ static void qce_sps_exit_ep_conn(struct qce_device *pce_dev,
 			sps_connect_info->desc.phys_base);
 	sps_free_endpoint(sps_pipe_info);
 }
-/**
- * Initialize SPS HW connected with CE core
- *
- * This function register BAM HW resources with
- * SPS driver and then initialize 2 SPS endpoints
- *
- * This function should only be called once typically
- * during driver probe.
- *
- * @pce_dev - Pointer to qce_device structure
- *
- * @return - 0 if successful else negative value.
- *
- */
-static int qce_sps_init(struct qce_device *pce_dev)
+
+static void qce_sps_release_bam(struct qce_device *pce_dev)
+{
+	struct bam_registration_info *pbam;
+
+	mutex_lock(&bam_register_lock);
+	pbam = pce_dev->pbam;
+	if (pbam == NULL)
+		goto ret;
+
+	pbam->cnt--;
+	if (pbam->cnt > 0)
+		goto ret;
+
+	if (pce_dev->ce_sps.bam_handle) {
+		sps_deregister_bam_device(pce_dev->ce_sps.bam_handle);
+
+		pr_debug("deregister bam handle %x\n",
+					pce_dev->ce_sps.bam_handle);
+		pce_dev->ce_sps.bam_handle = 0;
+	}
+	iounmap(pbam->bam_iobase);
+	pr_debug("delete bam 0x%x\n", pbam->bam_mem);
+	list_del(&pbam->qlist);
+	kfree(pbam);
+
+	pce_dev->pbam = NULL;
+ret:
+	mutex_unlock(&bam_register_lock);
+}
+
+static int qce_sps_get_bam(struct qce_device *pce_dev)
 {
 	int rc = 0;
 	struct sps_bam_props bam = {0};
-	bool register_bam = false;
+	struct bam_registration_info *pbam = NULL;
+	struct bam_registration_info *p;
+	uint32_t bam_cfg = 0 ;
+
+
+	mutex_lock(&bam_register_lock);
+
+	list_for_each_entry(p, &qce50_bam_list, qlist) {
+		if (p->bam_mem == pce_dev->bam_mem) {
+			pbam = p;  /* found */
+			break;
+		}
+	}
+
+	if (pbam) {
+		pr_debug("found bam 0x%x\n", pbam->bam_mem);
+		pbam->cnt++;
+		pce_dev->ce_sps.bam_handle =  pbam->handle;
+		pce_dev->ce_sps.bam_mem = pbam->bam_mem;
+		pce_dev->ce_sps.bam_iobase = pbam->bam_iobase;
+		pce_dev->pbam = pbam;
+		pce_dev->support_cmd_dscr = pbam->support_cmd_dscr;
+		goto ret;
+	}
+
+	pbam = kzalloc(sizeof(struct  bam_registration_info), GFP_KERNEL);
+	if (!pbam) {
+		pr_err("qce50 Memory allocation of bam FAIL, error %ld\n",
+						PTR_ERR(pbam));
+
+		rc = -ENOMEM;
+		goto ret;
+	}
+	pbam->cnt = 1;
+	pbam->bam_mem = pce_dev->bam_mem;
+	pbam->bam_iobase = ioremap_nocache(pce_dev->bam_mem,
+					pce_dev->bam_mem_size);
+	if (!pbam->bam_iobase) {
+		kfree(pbam);
+		rc = -ENOMEM;
+		pr_err("Can not map BAM io memory\n");
+		goto ret;
+	}
+	pce_dev->ce_sps.bam_mem = pbam->bam_mem;
+	pce_dev->ce_sps.bam_iobase = pbam->bam_iobase;
+	pbam->handle = 0;
+	pr_debug("allocate bam 0x%x\n", pbam->bam_mem);
+	bam_cfg = readl_relaxed(pce_dev->ce_sps.bam_iobase +
+					CRYPTO_BAM_CNFG_BITS_REG);
+	pbam->support_cmd_dscr =  (bam_cfg & CRYPTO_BAM_CD_ENABLE_MASK) ?
+					true : false;
+	pce_dev->support_cmd_dscr = pbam->support_cmd_dscr;
 
 	bam.phys_addr = pce_dev->ce_sps.bam_mem;
 	bam.virt_addr = pce_dev->ce_sps.bam_iobase;
@@ -2216,27 +2287,46 @@ static int qce_sps_init(struct qce_device *pce_dev)
 	pr_debug("bam physical base=0x%x\n", (u32)bam.phys_addr);
 	pr_debug("bam virtual base=0x%x\n", (u32)bam.virt_addr);
 
-	mutex_lock(&bam_register_cnt);
-	if (ce_bam_registered == false) {
-		bam_registry.handle = 0;
-		bam_registry.cnt = 0;
+	/* Register CE Peripheral BAM device to SPS driver */
+	rc = sps_register_bam_device(&bam, &pbam->handle);
+	if (rc) {
+		pr_err("sps_register_bam_device() failed! err=%d", rc);
+		rc = -EIO;
+		iounmap(pbam->bam_iobase);
+		kfree(pbam);
+		goto ret;
 	}
-	if ((bam_registry.handle == 0) && (bam_registry.cnt == 0)) {
-		/* Register CE Peripheral BAM device to SPS driver */
-		rc = sps_register_bam_device(&bam, &bam_registry.handle);
-		if (rc) {
-			mutex_unlock(&bam_register_cnt);
-			pr_err("sps_register_bam_device() failed! err=%d", rc);
-			return -EIO;
-		}
-		bam_registry.cnt++;
-		register_bam = true;
-		ce_bam_registered = true;
-	} else {
-		   bam_registry.cnt++;
-	}
-	mutex_unlock(&bam_register_cnt);
-	pce_dev->ce_sps.bam_handle =  bam_registry.handle;
+
+	pce_dev->pbam = pbam;
+	list_add_tail(&pbam->qlist, &qce50_bam_list);
+	pce_dev->ce_sps.bam_handle =  pbam->handle;
+
+ret:
+	mutex_unlock(&bam_register_lock);
+
+	return rc;
+}
+/**
+ * Initialize SPS HW connected with CE core
+ *
+ * This function register BAM HW resources with
+ * SPS driver and then initialize 2 SPS endpoints
+ *
+ * This function should only be called once typically
+ * during driver probe.
+ *
+ * @pce_dev - Pointer to qce_device structure
+ *
+ * @return - 0 if successful else negative value.
+ *
+ */
+static int qce_sps_init(struct qce_device *pce_dev)
+{
+	int rc = 0;
+
+	rc = qce_sps_get_bam(pce_dev);
+	if (rc)
+		return rc;
 	pr_debug("BAM device registered. bam_handle=0x%x",
 		pce_dev->ce_sps.bam_handle);
 
@@ -2257,14 +2347,7 @@ static int qce_sps_init(struct qce_device *pce_dev)
 sps_connect_consumer_err:
 	qce_sps_exit_ep_conn(pce_dev, &pce_dev->ce_sps.producer);
 sps_connect_producer_err:
-	if (register_bam) {
-		mutex_lock(&bam_register_cnt);
-		sps_deregister_bam_device(pce_dev->ce_sps.bam_handle);
-		ce_bam_registered = false;
-		bam_registry.handle = 0;
-		bam_registry.cnt = 0;
-		mutex_unlock(&bam_register_cnt);
-	}
+	qce_sps_release_bam(pce_dev);
 	return rc;
 }
 
@@ -2284,17 +2367,7 @@ static void qce_sps_exit(struct qce_device *pce_dev)
 {
 	qce_sps_exit_ep_conn(pce_dev, &pce_dev->ce_sps.consumer);
 	qce_sps_exit_ep_conn(pce_dev, &pce_dev->ce_sps.producer);
-	mutex_lock(&bam_register_cnt);
-	if ((bam_registry.handle != 0) && (bam_registry.cnt == 1)) {
-		sps_deregister_bam_device(pce_dev->ce_sps.bam_handle);
-		bam_registry.cnt = 0;
-		bam_registry.handle = 0;
-	}
-	if ((bam_registry.handle != 0) && (bam_registry.cnt > 1))
-		bam_registry.cnt--;
-	mutex_unlock(&bam_register_cnt);
-
-	iounmap(pce_dev->ce_sps.bam_iobase);
+	qce_sps_release_bam(pce_dev);
 }
 
 static void _aead_sps_producer_callback(struct sps_event_notify *notify)
@@ -3290,8 +3363,14 @@ static int qce_setup_ce_sps_data(struct qce_device *pce_dev)
 					pce_dev->ce_sps.ce_burst_size);
 	pce_dev->ce_sps.result_dump = (uint32_t)vaddr;
 	pce_dev->ce_sps.result = (struct ce_result_dump_format *)vaddr;
-	vaddr += 128;
+	vaddr += CRYPTO_RESULT_DUMP_SIZE;
 
+	pce_dev->ce_sps.ignore_buffer = (uint32_t)vaddr;
+	vaddr += pce_dev->ce_sps.ce_burst_size * 2;
+
+	if ((vaddr - pce_dev->coh_vmem) > pce_dev->memsize)
+		panic("qce50: Not enough coherent memory. Allocate %x , need %x",
+			 pce_dev->memsize, vaddr - pce_dev->coh_vmem);
 	return 0;
 }
 
@@ -3718,7 +3797,7 @@ int qce_aead_req(void *handle, struct qce_req *q_req)
 	qce_dma_map_sg(pce_dev->pdev, areq->src, pce_dev->src_nents,
 			(areq->src == areq->dst) ? DMA_BIDIRECTIONAL :
 							DMA_TO_DEVICE);
-	/* cipher + mac output  for encryption    */
+	/* cipher output  for encryption    */
 	if (areq->src != areq->dst) {
 		if (pce_dev->ce_sps.minor_version == 0)
 			/*
@@ -3799,7 +3878,7 @@ int qce_aead_req(void *handle, struct qce_req *q_req)
 		if (_qce_sps_add_data((uint32_t)pce_dev->phy_iv_in, ivsize,
 					&pce_dev->ce_sps.in_transfer))
 			goto bad;
-		if (_qce_sps_add_sg_data(pce_dev, areq->src, areq->cryptlen,
+		if (_qce_sps_add_sg_data(pce_dev, areq->src, q_req->cryptlen,
 					&pce_dev->ce_sps.in_transfer))
 			goto bad;
 		_qce_set_flag(&pce_dev->ce_sps.in_transfer,
@@ -3811,7 +3890,7 @@ int qce_aead_req(void *handle, struct qce_req *q_req)
 				(ivsize + areq->assoclen),
 				&pce_dev->ce_sps.out_transfer))
 			goto bad;
-		if (_qce_sps_add_sg_data(pce_dev, areq->dst, areq->cryptlen,
+		if (_qce_sps_add_sg_data(pce_dev, areq->dst, q_req->cryptlen,
 					&pce_dev->ce_sps.out_transfer))
 			goto bad;
 
@@ -4067,22 +4146,15 @@ static int __qce_get_device_tree_data(struct platform_device *pdev,
 	resource = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 							"crypto-bam-base");
 	if (resource) {
-		pce_dev->ce_sps.bam_mem = resource->start;
-		pce_dev->ce_sps.bam_iobase = ioremap_nocache(resource->start,
-					resource_size(resource));
-		if (!pce_dev->ce_sps.bam_iobase) {
-			rc = -ENOMEM;
-			pr_err("Can not map BAM io memory\n");
-			goto err_getting_bam_info;
-		}
+		pce_dev->bam_mem = resource->start;
+		pce_dev->bam_mem_size = resource_size(resource);
 	} else {
 		pr_err("CRYPTO BAM mem unavailable.\n");
 		rc = -ENODEV;
 		goto err_getting_bam_info;
 	}
-	pr_warn("ce_bam_phy_reg_base=0x%x  ", pce_dev->ce_sps.bam_mem);
-	pr_warn("ce_bam_virt_reg_base=0x%x\n",
-				(uint32_t)pce_dev->ce_sps.bam_iobase);
+	pr_warn("ce_bam_phy_reg_base=0x%x  ", pce_dev->bam_mem);
+
 	resource  = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (resource) {
 		pce_dev->ce_sps.bam_irq = resource->start;
@@ -4248,7 +4320,6 @@ EXPORT_SYMBOL(qce_disable_clk);
 void *qce_open(struct platform_device *pdev, int *rc)
 {
 	struct qce_device *pce_dev;
-	uint32_t bam_cfg = 0 ;
 
 	pce_dev = kzalloc(sizeof(struct qce_device), GFP_KERNEL);
 	if (!pce_dev) {
@@ -4291,15 +4362,9 @@ void *qce_open(struct platform_device *pdev, int *rc)
 	}
 	*rc = 0;
 
-	bam_cfg = readl_relaxed(pce_dev->ce_sps.bam_iobase +
-					CRYPTO_BAM_CNFG_BITS_REG);
-	pce_dev->support_cmd_dscr = (bam_cfg & CRYPTO_BAM_CD_ENABLE_MASK) ?
-								true : false;
 	qce_init_ce_cfg_val(pce_dev);
-	qce_setup_ce_sps_data(pce_dev);
 	qce_sps_init(pce_dev);
-
-
+	qce_setup_ce_sps_data(pce_dev);
 	qce_disable_clk(pce_dev);
 
 	return pce_dev;
@@ -4311,8 +4376,6 @@ err_mem:
 		dma_free_coherent(pce_dev->pdev, pce_dev->memsize,
 			pce_dev->coh_vmem, pce_dev->coh_pmem);
 err_iobase:
-	if (pce_dev->ce_sps.bam_iobase)
-		iounmap(pce_dev->ce_sps.bam_iobase);
 	if (pce_dev->iobase)
 		iounmap(pce_dev->iobase);
 err_pce_dev:

@@ -1,7 +1,7 @@
 /* include/linux/msm_mdp.h
  *
  * Copyright (C) 2007 Google Incorporated
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -80,11 +80,11 @@
 						unsigned int)
 #define MSMFB_ASYNC_BLIT              _IOW(MSMFB_IOCTL_MAGIC, 168, unsigned int)
 
-#define MSMFB_INVERT_PANEL  _IOW(MSMFB_IOCTL_MAGIC, 169, unsigned int)
+#define MSMFB_INVERT_PANEL  _IOW(MSMFB_IOCTL_MAGIC, 168, unsigned int)
 
-#if defined(CONFIG_LGE_BROADCAST_TDMB) || defined(CONFIG_LGE_BROADCAST_ONESEG) || defined (LGE_BROADCAST_ONESEG)
-#define MSMFB_DMB_SET_FLAG        _IOW(MSMFB_IOCTL_MAGIC, 170, int)
-#define MSMFB_DMB_SET_CSC_MATRIX  _IOW(MSMFB_IOCTL_MAGIC, 171, struct mdp_csc_cfg)
+#if defined(CONFIG_LGE_BROADCAST_TDMB) || defined(CONFIG_LGE_BROADCAST_ONESEG) || defined(LGE_BROADCAST_ONESEG)
+#define MSMFB_DMB_SET_FLAG        _IOW(MSMFB_IOCTL_MAGIC, 169, int)
+#define MSMFB_DMB_SET_CSC_MATRIX  _IOW(MSMFB_IOCTL_MAGIC, 170, struct mdp_csc_cfg)
 #endif /* LGE_BROADCAST */
 
 #define FB_TYPE_3D_PANEL 0x10101010
@@ -133,15 +133,15 @@ enum {
 	MDP_BGR_888,      /* BGR 888 */
 	MDP_Y_CBCR_H2V2_VENUS,
 	MDP_BGRX_8888,   /* BGRX 8888 */
+	MDP_RGBA_8888_TILE,	/* RGBA 8888 in tile format */
+	MDP_ARGB_8888_TILE,	/* ARGB 8888 in tile format */
+	MDP_ABGR_8888_TILE,	/* ABGR 8888 in tile format */
+	MDP_BGRA_8888_TILE,	/* BGRA 8888 in tile format */
+	MDP_RGBX_8888_TILE,	/* RGBX 8888 in tile format */
+	MDP_XRGB_8888_TILE,	/* XRGB 8888 in tile format */
+	MDP_XBGR_8888_TILE,	/* XBGR 8888 in tile format */
+	MDP_BGRX_8888_TILE,	/* BGRX 8888 in tile format */
 	MDP_YCBYCR_H2V1,  /* YCbYCr interleave */
-	MDP_RGBA_8888_TILE,	  /* RGBA 8888 in tile format */
-	MDP_ARGB_8888_TILE,	  /* ARGB 8888 in tile format */
-	MDP_ABGR_8888_TILE,	  /* ABGR 8888 in tile format */
-	MDP_BGRA_8888_TILE,	  /* BGRA 8888 in tile format */
-	MDP_RGBX_8888_TILE,	  /* RGBX 8888 in tile format */
-	MDP_XRGB_8888_TILE,	  /* XRGB 8888 in tile format */
-	MDP_XBGR_8888_TILE,	  /* XBGR 8888 in tile format */
-	MDP_BGRX_8888_TILE,	  /* BGRX 8888 in tile format */
 	MDP_IMGTYPE_LIMIT,
 	MDP_RGB_BORDERFILL,	/* border fill pipe */
 	MDP_FB_FORMAT = MDP_IMGTYPE2_START,    /* framebuffer format */
@@ -176,7 +176,7 @@ enum {
 #define MDP_BLUR 0x10
 #define MDP_BLEND_FG_PREMULT 0x20000
 #define MDP_IS_FG 0x40000
-#define MDP_SOLID_FILL 0x00000020
+#define MDP_SOLID_FILL 0x0000100
 #define MDP_DEINTERLACE 0x80000000
 #define MDP_SHARPENING  0x40000000
 #define MDP_NO_DMA_BARRIER_START	0x20000000
@@ -196,6 +196,7 @@ enum {
 #define MDP_BACKEND_COMPOSITION		0x00040000
 #define MDP_BORDERFILL_SUPPORTED	0x00010000
 #define MDP_SECURE_OVERLAY_SESSION      0x00008000
+#define MDP_SECURE_DISPLAY_OVERLAY_SESSION	0x00002000
 #define MDP_OV_PIPE_FORCE_DMA		0x00004000
 #define MDP_MEMORY_ID_TYPE_FB		0x00001000
 #define MDP_BWC_EN			0x00000400
@@ -233,8 +234,8 @@ struct mdp_img {
  * {3x3} + {3} ccs matrix
  */
 
-#define MDP_CCS_RGB2YUV 	0
-#define MDP_CCS_YUV2RGB 	1
+#define MDP_CCS_RGB2YUV	0
+#define MDP_CCS_YUV2RGB	1
 
 #define MDP_CCS_SIZE	9
 #define MDP_BV_SIZE	3
@@ -261,11 +262,19 @@ struct mdp_csc {
 
 #define MDP_BLIT_REQ_VERSION 2
 
+struct color {
+	uint32_t r;
+	uint32_t g;
+	uint32_t b;
+	uint32_t alpha;
+};
+
 struct mdp_blit_req {
 	struct mdp_img src;
 	struct mdp_img dst;
 	struct mdp_rect src_rect;
 	struct mdp_rect dst_rect;
+	struct color const_color;
 	uint32_t alpha;
 	uint32_t transp_mask;
 	uint32_t flags;
@@ -318,6 +327,27 @@ struct msmfb_writeback_data {
 #define MDP_PP_IGC_FLAG_ROM0	0x10
 #define MDP_PP_IGC_FLAG_ROM1	0x20
 
+#define MDP_PP_PA_HUE_ENABLE		0x10
+#define MDP_PP_PA_SAT_ENABLE		0x20
+#define MDP_PP_PA_VAL_ENABLE		0x40
+#define MDP_PP_PA_CONT_ENABLE		0x80
+#define MDP_PP_PA_SIX_ZONE_ENABLE	0x100
+#define MDP_PP_PA_SKIN_ENABLE		0x200
+#define MDP_PP_PA_SKY_ENABLE		0x400
+#define MDP_PP_PA_FOL_ENABLE		0x800
+#define MDP_PP_PA_HUE_MASK		0x1000
+#define MDP_PP_PA_SAT_MASK		0x2000
+#define MDP_PP_PA_VAL_MASK		0x4000
+#define MDP_PP_PA_CONT_MASK		0x8000
+#define MDP_PP_PA_SIX_ZONE_HUE_MASK	0x10000
+#define MDP_PP_PA_SIX_ZONE_SAT_MASK	0x20000
+#define MDP_PP_PA_SIX_ZONE_VAL_MASK	0x40000
+#define MDP_PP_PA_MEM_COL_SKIN_MASK	0x80000
+#define MDP_PP_PA_MEM_COL_SKY_MASK	0x100000
+#define MDP_PP_PA_MEM_COL_FOL_MASK	0x200000
+#define MDP_PP_PA_MEM_PROTECT_EN	0x400000
+#define MDP_PP_PA_SAT_ZERO_EXP_EN	0x800000
+
 #define MDSS_PP_DSPP_CFG	0x000
 #define MDSS_PP_SSPP_CFG	0x100
 #define MDSS_PP_LM_CFG	0x200
@@ -362,6 +392,7 @@ struct mdp_qseed_cfg_data {
 #define MDP_OVERLAY_PP_SHARP_CFG       0x10
 #define MDP_OVERLAY_PP_HIST_CFG        0x20
 #define MDP_OVERLAY_PP_HIST_LUT_CFG    0x40
+#define MDP_OVERLAY_PP_PA_V2_CFG       0x80
 
 #define MDP_CSC_FLAG_ENABLE	0x1
 #define MDP_CSC_FLAG_YUV_IN	0x2
@@ -388,6 +419,31 @@ struct mdp_pa_cfg {
 	uint32_t sat_adj;
 	uint32_t val_adj;
 	uint32_t cont_adj;
+};
+
+struct mdp_pa_mem_col_cfg {
+	uint32_t color_adjust_p0;
+	uint32_t color_adjust_p1;
+	uint32_t hue_region;
+	uint32_t sat_region;
+	uint32_t val_region;
+};
+
+#define MDP_SIX_ZONE_TABLE_NUM		384
+
+struct mdp_pa_v2_data {
+	/* Mask bits for PA features */
+	uint32_t flags;
+	uint32_t global_hue_adj;
+	uint32_t global_sat_adj;
+	uint32_t global_val_adj;
+	uint32_t global_cont_adj;
+	uint32_t *six_zone_curve_p0;
+	uint32_t *six_zone_curve_p1;
+	uint32_t six_zone_thresh;
+	struct mdp_pa_mem_col_cfg skin_cfg;
+	struct mdp_pa_mem_col_cfg sky_cfg;
+	struct mdp_pa_mem_col_cfg fol_cfg;
 };
 
 struct mdp_igc_lut_data {
@@ -417,6 +473,7 @@ struct mdp_overlay_pp_params {
 	struct mdp_csc_cfg csc_cfg;
 	struct mdp_qseed_cfg qseed_cfg[2];
 	struct mdp_pa_cfg pa_cfg;
+	struct mdp_pa_v2_data pa_v2_cfg;
 	struct mdp_igc_lut_data igc_cfg;
 	struct mdp_sharp_cfg sharp_cfg;
 	struct mdp_histogram_cfg hist_cfg;
@@ -448,6 +505,33 @@ enum mdss_mdp_blend_op {
 	BLEND_OP_PREMULTIPLIED,
 	BLEND_OP_COVERAGE,
 	BLEND_OP_MAX,
+};
+
+#define MAX_PLANES	4
+struct mdp_scale_data {
+	uint8_t enable_pxl_ext;
+
+	int init_phase_x[MAX_PLANES];
+	int phase_step_x[MAX_PLANES];
+	int init_phase_y[MAX_PLANES];
+	int phase_step_y[MAX_PLANES];
+
+	int num_ext_pxls_left[MAX_PLANES];
+	int num_ext_pxls_right[MAX_PLANES];
+	int num_ext_pxls_top[MAX_PLANES];
+	int num_ext_pxls_btm[MAX_PLANES];
+
+	int left_ftch[MAX_PLANES];
+	int left_rpt[MAX_PLANES];
+	int right_ftch[MAX_PLANES];
+	int right_rpt[MAX_PLANES];
+
+	int top_rpt[MAX_PLANES];
+	int btm_rpt[MAX_PLANES];
+	int top_ftch[MAX_PLANES];
+	int btm_ftch[MAX_PLANES];
+
+	uint32_t roi_w[MAX_PLANES];
 };
 
 /**
@@ -510,6 +594,7 @@ struct mdp_overlay {
 	uint8_t horz_deci;
 	uint8_t vert_deci;
 	struct mdp_overlay_pp_params overlay_pp_cfg;
+	struct mdp_scale_data scale;
 };
 
 struct msmfb_overlay_3d {
@@ -535,19 +620,21 @@ struct mdp_histogram {
 	uint32_t *b;
 };
 
+#define MISR_CRC_BATCH_SIZE 32
 enum {
-	DISPLAY_MISR_EDP,
+	DISPLAY_MISR_EDP = 0,
 	DISPLAY_MISR_DSI0,
 	DISPLAY_MISR_DSI1,
 	DISPLAY_MISR_HDMI,
 	DISPLAY_MISR_LCDC,
+	DISPLAY_MISR_MDP,
 	DISPLAY_MISR_ATV,
 	DISPLAY_MISR_DSI_CMD,
 	DISPLAY_MISR_MAX
 };
 
 enum {
-	MISR_OP_NONE,
+	MISR_OP_NONE = 0,
 	MISR_OP_SFM,
 	MISR_OP_MFM,
 	MISR_OP_BM,
@@ -558,7 +645,7 @@ struct mdp_misr {
 	uint32_t block_id;
 	uint32_t frame_count;
 	uint32_t crc_op_mode;
-	uint32_t crc_value[32];
+	uint32_t crc_value[MISR_CRC_BATCH_SIZE];
 };
 
 /*
@@ -674,6 +761,11 @@ struct mdp_pa_cfg_data {
 	struct mdp_pa_cfg pa_data;
 };
 
+struct mdp_pa_v2_cfg_data {
+	uint32_t block;
+	struct mdp_pa_v2_data pa_v2_data;
+};
+
 struct mdp_dither_cfg_data {
 	uint32_t block;
 	uint32_t flags;
@@ -718,12 +810,13 @@ enum {
 };
 
 #define MDSS_MAX_BL_BRIGHTNESS 255
-#define AD_BL_LIN_LEN (MDSS_MAX_BL_BRIGHTNESS + 1)
+#define AD_BL_LIN_LEN 256
 
 #define MDSS_AD_MODE_AUTO_BL	0x0
 #define MDSS_AD_MODE_AUTO_STR	0x1
 #define MDSS_AD_MODE_TARG_STR	0x3
 #define MDSS_AD_MODE_MAN_STR	0x7
+#define MDSS_AD_MODE_CALIB	0xF
 
 #define MDP_PP_AD_INIT	0x10
 #define MDP_PP_AD_CFG	0x20
@@ -751,6 +844,8 @@ struct mdss_ad_init {
 	uint32_t *bl_lin_inv;
 };
 
+#define MDSS_AD_BL_CTRL_MODE_EN 1
+#define MDSS_AD_BL_CTRL_MODE_DIS 0
 struct mdss_ad_cfg {
 	uint32_t mode;
 	uint32_t al_calib_lut[33];
@@ -763,6 +858,7 @@ struct mdss_ad_cfg {
 	uint8_t strength_limit;
 	uint8_t t_filter_recursion;
 	uint16_t stab_itr;
+	uint32_t bl_ctrl_mode;
 };
 
 /* ops uses standard MDP_PP_* flags */
@@ -780,6 +876,7 @@ struct mdss_ad_input {
 	union {
 		uint32_t amb_light;
 		uint32_t strength;
+		uint32_t calib_bl;
 	} in;
 	uint32_t output;
 };
@@ -797,6 +894,7 @@ enum {
 	mdp_op_qseed_cfg,
 	mdp_bl_scale_cfg,
 	mdp_op_pa_cfg,
+	mdp_op_pa_v2_cfg,
 	mdp_op_dither_cfg,
 	mdp_op_gamut_cfg,
 	mdp_op_calib_cfg,
@@ -828,6 +926,7 @@ struct msmfb_mdp_pp {
 		struct mdp_qseed_cfg_data qseed_cfg_data;
 		struct mdp_bl_scale_data bl_scale_data;
 		struct mdp_pa_cfg_data pa_cfg_data;
+		struct mdp_pa_v2_cfg_data pa_v2_cfg_data;
 		struct mdp_dither_cfg_data dither_cfg_data;
 		struct mdp_gamut_cfg_data gamut_cfg_data;
 		struct mdp_calib_config_data calib_cfg;
@@ -892,7 +991,6 @@ struct mdp_buf_sync {
 	uint32_t session_id;
 	int *acq_fen_fd;
 	int *rel_fen_fd;
-	int *retire_fen_fd;
 };
 
 struct mdp_async_blit_req_list {
@@ -902,11 +1000,19 @@ struct mdp_async_blit_req_list {
 };
 
 #define MDP_DISPLAY_COMMIT_OVERLAY	1
+struct mdp_buf_fence {
+	uint32_t flags;
+	uint32_t acq_fen_fd_cnt;
+	int acq_fen_fd[MDP_MAX_FENCE_FD];
+	int rel_fen_fd[MDP_MAX_FENCE_FD];
+};
+
 
 struct mdp_display_commit {
 	uint32_t flags;
 	uint32_t wait_for_finish;
 	struct fb_var_screeninfo var;
+	struct mdp_buf_fence buf_fence;
 	struct mdp_rect roi;
 };
 
@@ -963,7 +1069,6 @@ int msm_fb_writeback_dequeue_buffer(struct fb_info *info,
 int msm_fb_writeback_stop(struct fb_info *info);
 int msm_fb_writeback_terminate(struct fb_info *info);
 int msm_fb_writeback_set_secure(struct fb_info *info, int enable);
-int msm_fb_writeback_iommu_ref(struct fb_info *info, int enable);
 #endif
 
 #endif /*_MSM_MDP_H_*/

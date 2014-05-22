@@ -18,7 +18,6 @@
 #include <asm/cacheflush.h>
 #include <linux/fdtable.h>
 #include <linux/file.h>
-#include <linux/freezer.h>
 #include <linux/fs.h>
 #include <linux/list.h>
 #include <linux/miscdevice.h>
@@ -102,7 +101,7 @@ enum {
 	BINDER_DEBUG_BUFFER_ALLOC_ASYNC     = 1U << 15,
 	BINDER_DEBUG_TOP_ERRORS		    = 1U << 16,
 };
-static uint32_t binder_debug_mask;
+static uint32_t binder_debug_mask = BINDER_DEBUG_USER_ERROR | BINDER_DEBUG_FAILED_TRANSACTION | BINDER_DEBUG_DEAD_TRANSACTION;
 module_param_named(debug_mask, binder_debug_mask, uint, S_IWUSR | S_IRUGO);
 
 static bool binder_debug_no_lock;
@@ -2297,13 +2296,13 @@ retry:
 			if (!binder_has_proc_work(proc, thread))
 				ret = -EAGAIN;
 		} else
-			ret = wait_event_freezable_exclusive(proc->wait, binder_has_proc_work(proc, thread));
+			ret = wait_event_interruptible_exclusive(proc->wait, binder_has_proc_work(proc, thread));
 	} else {
 		if (non_block) {
 			if (!binder_has_thread_work(thread))
 				ret = -EAGAIN;
 		} else
-			ret = wait_event_freezable(thread->wait, binder_has_thread_work(thread));
+			ret = wait_event_interruptible(thread->wait, binder_has_thread_work(thread));
 	}
 	mutex_lock(&binder_lock);
 	if (wait_for_proc_work)

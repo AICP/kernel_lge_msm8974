@@ -43,6 +43,10 @@
 #define MAX_SSR_REASON_LEN	81U
 #define STOP_ACK_TIMEOUT_MS	1000
 
+/* START : subsys_modem_restart : testmode */
+bool ignore_errors_by_subsys_modem_restart = false;
+/* END : subsys_modem_restart : testmode */
+
 struct modem_data {
 	struct mba_data *mba;
 	struct q6v5_data *q6;
@@ -62,9 +66,9 @@ struct lge_hw_smem_id2_type {
 
 #define subsys_to_drv(d) container_of(d, struct modem_data, subsys_desc)
 
-// [START] jin.park@lge.com, SSR FEATURE
+/* [START] jin.park@lge.com, SSR FEATURE */
 char ssr_noti[MAX_SSR_REASON_LEN];
-// [END] jin.park@lge.com, SSR FEATURE
+/* [END] jin.park@lge.com, SSR FEATURE */
 
 static void log_modem_sfr(void)
 {
@@ -84,9 +88,9 @@ static void log_modem_sfr(void)
 	strlcpy(reason, smem_reason, min(size, sizeof(reason)));
 	pr_err("modem subsystem failure reason: %s.\n", reason);
 
-// [START] jin.park@lge.com, SSR FEATURE
+/* [START] jin.park@lge.com, SSR FEATURE */
 	strlcpy(ssr_noti, smem_reason, min(size, sizeof(ssr_noti)));
-// [END] jin.park@lge.com, SSR FEATURE
+/* [END] jin.park@lge.com, SSR FEATURE */
 
 	smem_reason[0] = '\0';
 	wmb();
@@ -107,15 +111,19 @@ static int check_modem_reset(void)
 
 	smem_id2 = smem_get_entry(SMEM_ID_VENDOR2, &size);
 
-	if(smem_id2->modem_reset != 1) {
+/* [START] kyeongsu.jang@lge.com, Add a routine to check NULL */
+	if(smem_id2 != 0 && smem_id2->modem_reset != 1) {
 		return 1;
 	}
 
 	printk("modem reset command is invoked.\n");
 	ret = subsys_modem_restart();
 
-	smem_id2->modem_reset = 0;
+	if(smem_id2 != 0) {
+		smem_id2->modem_reset = 0;
+	}
 	wmb();
+/* [END] kyeongsu.jang@lge.com, Add a routine to check NULL */
 
 	return ret;
 }
@@ -186,6 +194,11 @@ static int modem_powerup(const struct subsys_desc *subsys)
 	 */
 	INIT_COMPLETION(drv->stop_ack);
 	drv->ignore_errors = false;
+
+	/* START : subsys_modem_restart : testmode */
+	ignore_errors_by_subsys_modem_restart = false;
+	/* END : subsys_modem_restart : testmode */
+
 	ret = pil_boot(&drv->q6->desc);
 	if (ret)
 		return ret;
@@ -244,6 +257,14 @@ static irqreturn_t modem_wdog_bite_intr_handler(int irq, void *dev_id)
 	struct modem_data *drv = subsys_to_drv(dev_id);
 	if (drv->ignore_errors)
 		return IRQ_HANDLED;
+
+	/* START : subsys_modem_restart : testmode */
+	if (ignore_errors_by_subsys_modem_restart) {
+		pr_err("IGNORE watchdog bite received from modem software!\n");		
+		return IRQ_HANDLED;
+	}
+	/* END : subsys_modem_restart : testmode */
+
 	pr_err("Watchdog bite received from modem software!\n");
 	subsys_set_crash_status(drv->subsys, true);
 	restart_modem(drv);

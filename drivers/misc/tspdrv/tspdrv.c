@@ -50,8 +50,6 @@
 #include <tspdrvRecorder.c>
 #endif
 
-#include"imm_timed_output.h"
-
 /* Device name and version information */
 #define VERSION_STR " v3.4.55.9\n"                  /* DO NOT CHANGE - this is auto-generated */
 #define VERSION_STR_LEN 16                          /* account extra space for future extra digits in version number */
@@ -160,40 +158,10 @@ MODULE_AUTHOR("Immersion Corporation");
 MODULE_DESCRIPTION("TouchSense Kernel Module");
 MODULE_LICENSE("GPL v2");
 
-extern VibeInt8 timedForce;
-
-static ssize_t nforce_val_show(struct device *dev, struct device_attribute *attr,
-               char *buf)
-{
-       return sprintf(buf, "%hu", timedForce);
-}
-
-static ssize_t nforce_val_store(struct device *dev, struct device_attribute *attr,
-               const char *buf, size_t size)
-{
-       unsigned short int strength_val = DEFAULT_TIMED_STRENGTH;
-       if (kstrtoul(buf, 0, (unsigned long int*)&strength_val))
-               pr_err("[VIB] %s: error on storing nforce\n", __func__);
-
-
-       /* make sure new pwm duty is in range */
-       if (strength_val > 127)
-               strength_val = 127;
-       else if (strength_val < 1)
-               strength_val = 1;
-
-       timedForce = strength_val;
-
-       return size;
-}
-
-static DEVICE_ATTR(nforce_timed, S_IRUGO | S_IWUSR, nforce_val_show, nforce_val_store);
-
-
 #if 1
-/*                  
-                                                    
-                                  
+/* LGE_CHANGED_START
+  * Vibrator on/off device file is added(vib_enable)
+  * 2012.11.11, sehwan.lee@lge.com
   */ 
 static int val = 0;
 
@@ -234,7 +202,7 @@ static struct device_attribute immersion_device_attrs[] = {
 	__ATTR(vib_enable,  S_IRUGO | S_IWUSR, immersion_enable_show, immersion_enable_store),
 };
 
-/*                                                */
+/* LGE_CHANGED_END 2012.11.11, sehwan.lee@lge.com */
 #endif
 
 int __init tspdrv_init(void)
@@ -273,9 +241,9 @@ int __init tspdrv_init(void)
         DbgOut((KERN_ERR "tspdrv: platform_driver_register failed.\n"));
     }
 #if 1
-/*                  
-                                                    
-                                  
+/* LGE_CHANGED_START
+  * Vibrator on/off device file is added(vib_enable)
+  * 2012.11.11, sehwan.lee@lge.com
   */ 
 	for (i = 0; i < ARRAY_SIZE(immersion_device_attrs); i++) {
 			err = device_create_file(miscdev.this_device, &immersion_device_attrs[i]);
@@ -283,7 +251,7 @@ int __init tspdrv_init(void)
 				return err;
 	}
 	
-/*                                                */
+/* LGE_CHANGED_END 2012.11.11, sehwan.lee@lge.com */
 #endif
     DbgRecorderInit(());
 
@@ -306,8 +274,6 @@ int __init tspdrv_init(void)
         g_SamplesBuffer[i].actuatorSamples[1].nBufferSize = 0;
     }
 
-    device_create_file(&platdev.dev, &dev_attr_nforce_timed);
-    ImmVibe_timed_output();
     return 0;
 }
 
@@ -504,7 +470,6 @@ static ssize_t write(struct file *file, const char *buf, size_t count, loff_t *p
 
     return count;
 }
-
 
 #if HAVE_UNLOCKED_IOCTL
 static long unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)

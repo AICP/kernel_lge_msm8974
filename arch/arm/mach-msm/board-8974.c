@@ -45,8 +45,8 @@
 #include "clock.h"
 #include "devices.h"
 #include "spm.h"
+#include "pm.h"
 #include "modem_notifier.h"
-#include "lpm_resources.h"
 #include "platsmp.h"
 #include <mach/board_lge.h>
 
@@ -97,7 +97,7 @@ void __init msm8974_add_drivers(void)
 	msm_init_modem_notifier_list();
 	msm_smd_init();
 	msm_rpm_driver_init();
-	msm_lpmrs_module_init();
+	msm_pm_sleep_status_init();
 	rpm_regulator_smd_driver_init();
 	msm_spm_device_init();
 	krait_power_init();
@@ -108,6 +108,11 @@ void __init msm8974_add_drivers(void)
 	tsens_tm_init_driver();
 	msm_thermal_device_init();
 }
+
+static struct of_dev_auxdata msm_hsic_host_adata[] = {
+	OF_DEV_AUXDATA("qcom,hsic-host", 0xF9A00000, "msm_hsic_host", NULL),
+	{}
+};
 
 static struct of_dev_auxdata msm8974_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("qcom,hsusb-otg", 0xF9A55000, \
@@ -149,6 +154,8 @@ static struct of_dev_auxdata msm8974_auxdata_lookup[] __initdata = {
 			"qcrypto.0", NULL),
 	OF_DEV_AUXDATA("qcom,hsic-host", 0xF9A00000, \
 			"msm_hsic_host", NULL),
+	OF_DEV_AUXDATA("qcom,hsic-smsc-hub", 0, "msm_smsc_hub",
+			msm_hsic_host_adata),
 	{}
 };
 

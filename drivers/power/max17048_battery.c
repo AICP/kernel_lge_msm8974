@@ -116,7 +116,7 @@ int lge_power_test_flag = 1;
 #endif
 #endif
 
-#if defined(CONFIG_MACH_MSM8974_G2_KR) || defined(CONFIG_MACH_MSM8974_VU3_KR)
+#if defined(CONFIG_MACH_MSM8974_G2_KR) || defined(CONFIG_MACH_MSM8974_VU3_KR) || defined(CONFIG_MACH_MSM8974_B1_KR)
 /* using to cal rcomp */
 int cell_info = 0;
 #endif
@@ -179,9 +179,7 @@ static int max17048_get_status(struct i2c_client *client)
 		dev_err(&client->dev, "%s: err %d\n", __func__, status);
 		return status;
 	} else {
-#ifdef MAX17048_DEBUG
 		printk(KERN_ERR "%s : status = 0x%x\n", __func__, status);
-#endif
 		chip->status = status;
 		return 0;
 	}
@@ -220,11 +218,16 @@ static int max17048_get_capacity_from_soc(void)
 
 	/* SOC scaling for stable max SOC and changed Cut-off */
 	/*Adj SOC = (FG SOC-Emply)/(Full-Empty)*100*/
-#if defined (CONFIG_MACH_MSM8974_G2_KR) || defined(CONFIG_MACH_MSM8974_VU3_KR)
+#ifdef CONFIG_MACH_MSM8974_G2_KR
 	batt_soc = (batt_soc-((ref->model_data->empty)*100000))
 						/(9400-(ref->model_data->empty))*10000;
+#elif defined (CONFIG_MACH_MSM8974_VU3_KR)
+	batt_soc = (batt_soc-((ref->model_data->empty)*100000))
+						/(9200-(ref->model_data->empty))*10000;
 #elif defined (CONFIG_MACH_MSM8974_Z_KR) || defined(CONFIG_MACH_MSM8974_Z_US) || defined(CONFIG_MACH_MSM8974_Z_KDDI)
 	batt_soc = batt_soc/94*100+10000000;
+#elif defined(CONFIG_MACH_MSM8974_B1_KR)
+	batt_soc = batt_soc/93*100;
 #else
 	batt_soc = batt_soc/94*100;
 #endif
@@ -298,7 +301,7 @@ static uint16_t max17048_get_version(struct i2c_client *client)
 	return swab16(i2c_smbus_read_word_data(client, MAX17048_VER));
 }
 
-#ifdef CONFIG_MACH_MSM8974_Z_KR
+#if defined(CONFIG_MACH_MSM8974_Z_KR) || defined(CONFIG_MACH_MSM8974_B1_KR)
 static void max17048_get_ocv(struct i2c_client *client)
 {
 	u8 values[2];
@@ -336,7 +339,7 @@ static void max17048_low_polling_work(struct work_struct *work)
 		printk(KERN_INFO "%s : Called before init.\n", __func__);
 		return;
 	}
-#ifdef CONFIG_MACH_MSM8974_Z_KR
+#if defined(CONFIG_MACH_MSM8974_Z_KR) || defined(CONFIG_MACH_MSM8974_B1_KR)
 	max17048_get_ocv(chip->client);
 #endif
 	max17048_get_soc(chip->client);
@@ -425,6 +428,8 @@ static void max17048_polling_work(struct work_struct *work)
 						/(9400-(ref->model_data->empty))*10000;
 #elif defined (CONFIG_MACH_MSM8974_Z_KR) || defined(CONFIG_MACH_MSM8974_Z_US) || defined(CONFIG_MACH_MSM8974_Z_KDDI)
 		capacity = capacity/94*100 + 10000000;
+#elif defined(CONFIG_MACH_MSM8974_B1_KR)
+		capacity = capacity/93*100;
 #else
 		capacity = capacity/94*100;
 #endif
@@ -496,17 +501,15 @@ static void max17048_work(struct work_struct *work)
 		printk(KERN_INFO "%s : error get status register.\n", __func__);
 #endif
 
-#ifdef CONFIG_MACH_MSM8974_Z_KR
+#if defined(CONFIG_MACH_MSM8974_Z_KR) || defined(CONFIG_MACH_MSM8974_B1_KR)
 	max17048_get_ocv(chip->client);
 #endif
 	/* Update recently VCELL, SOC and CAPACITY */
 	max17048_get_vcell(chip->client);
 	max17048_get_soc(chip->client);
 
-#ifdef MAX17048_DEBUG
 	printk(KERN_ERR "%s : Raw SOC : 0x%x / vcell : 0x%x\n",
 		__func__, chip->soc, chip->vcell);
-#endif
 
 #ifdef CONFIG_LGE_PM
 	if ( (abs(chip->voltage - chip->lasttime_voltage) >= 50) ||
@@ -522,10 +525,8 @@ static void max17048_work(struct work_struct *work)
 				goto psy_error;
 		}
 
-#ifdef MAX17048_DEBUG
 		printk(KERN_ERR "%s : Reported Capacity : %d / voltage : %d\n",
 				__func__, chip->capacity_level, chip->voltage);
-#endif
 
 		power_supply_changed(chip->batt_psy);
 	}
@@ -603,9 +604,7 @@ static int max17048_clear_interrupt(struct i2c_client *client)
 {
 	struct max17048_chip *chip = i2c_get_clientdata(client);
 	int ret;
-#ifdef MAX17048_DEBUG
 	printk(KERN_INFO "%s.\n", __func__);
-#endif
 	if (chip == NULL)
 		return -ENODEV;
 
@@ -848,7 +847,7 @@ ssize_t max17048_show_voltage(struct device *dev,
 		/* Reduce charger source */
 #if defined(CONFIG_MACH_MSM8974_VU3_KR) || defined(CONFIG_MACH_MSM8974_G2_KDDI)
 		external_qpnp_enable_charging(0);
-#elif defined(CONFIG_MACH_MSM8974_Z_KR) || defined(CONFIG_MACH_MSM8974_Z_US) || defined(CONFIG_MACH_MSM8974_Z_KDDI)
+#elif defined(CONFIG_MACH_MSM8974_Z_KR) || defined(CONFIG_MACH_MSM8974_Z_US) || defined(CONFIG_MACH_MSM8974_Z_KDDI) || defined(CONFIG_MACH_MSM8974_B1_KR)
 		external_bq24192_enable_charging(0);
 #else
 		external_smb349_enable_charging(0);
@@ -861,7 +860,7 @@ ssize_t max17048_show_voltage(struct device *dev,
 		/* Restore charger source */
 #if defined(CONFIG_MACH_MSM8974_VU3_KR) || defined(CONFIG_MACH_MSM8974_G2_KDDI)
 		external_qpnp_enable_charging(1);
-#elif defined(CONFIG_MACH_MSM8974_Z_KR) || defined(CONFIG_MACH_MSM8974_Z_US) || defined(CONFIG_MACH_MSM8974_Z_KDDI)
+#elif defined(CONFIG_MACH_MSM8974_Z_KR) || defined(CONFIG_MACH_MSM8974_Z_US) || defined(CONFIG_MACH_MSM8974_Z_KDDI) || defined(CONFIG_MACH_MSM8974_B1_KR)
 		external_bq24192_enable_charging(1);
 #else
 		external_smb349_enable_charging(1);
@@ -897,7 +896,7 @@ ssize_t max17048_show_capacity(struct device *dev,
 		/* Reduce charger source */
 #if defined(CONFIG_MACH_MSM8974_VU3_KR) || defined(CONFIG_MACH_MSM8974_G2_KDDI)
 		external_qpnp_enable_charging(0);
-#elif defined(CONFIG_MACH_MSM8974_Z_KR) || defined(CONFIG_MACH_MSM8974_Z_US) || defined(CONFIG_MACH_MSM8974_Z_KDDI)
+#elif defined(CONFIG_MACH_MSM8974_Z_KR) || defined(CONFIG_MACH_MSM8974_Z_US) || defined(CONFIG_MACH_MSM8974_Z_KDDI) || defined(CONFIG_MACH_MSM8974_B1_KR)
 		external_bq24192_enable_charging(0);
 #else
 		external_smb349_enable_charging(0);
@@ -914,7 +913,7 @@ ssize_t max17048_show_capacity(struct device *dev,
 		/* Restore charger source */
 #if defined(CONFIG_MACH_MSM8974_VU3_KR) || defined(CONFIG_MACH_MSM8974_G2_KDDI)
 		external_qpnp_enable_charging(1);
-#elif defined(CONFIG_MACH_MSM8974_Z_KR) || defined(CONFIG_MACH_MSM8974_Z_US) || defined(CONFIG_MACH_MSM8974_Z_KDDI)
+#elif defined(CONFIG_MACH_MSM8974_Z_KR) || defined(CONFIG_MACH_MSM8974_Z_US) || defined(CONFIG_MACH_MSM8974_Z_KDDI) || defined(CONFIG_MACH_MSM8974_B1_KR)
 		external_bq24192_enable_charging(1);
 #else
 		external_smb349_enable_charging(1);
@@ -1016,6 +1015,18 @@ static int max17048_parse_dt(struct device *dev,
 		mdata->temp_co_cold = 5275;
 
 	}
+#elif defined(CONFIG_MACH_MSM8974_B1_KR)
+	if(cell_info == LGC_LLL) {
+		mdata->rcomp = 93;
+		mdata->temp_co_hot = 0;
+		mdata->temp_co_cold = 5275;
+	}
+	else if(cell_info == TCD_AAC) {
+		mdata->rcomp = 43;
+		mdata->temp_co_hot = 325;
+		mdata->temp_co_cold = 4875;
+
+	}
 #else
 	rc = of_property_read_u32(dev_node, "max17048,rcomp",
 			&mdata->rcomp);
@@ -1070,7 +1081,7 @@ static int __devinit max17048_probe(struct i2c_client *client,
 			return 0;
 		}
 
-#if defined(CONFIG_MACH_MSM8974_G2_KR) || defined(CONFIG_MACH_MSM8974_VU3_KR)
+#if defined(CONFIG_MACH_MSM8974_G2_KR) || defined(CONFIG_MACH_MSM8974_VU3_KR) || defined(CONFIG_MACH_MSM8974_B1_KR)
 		else if(*batt_id == BATT_DS2704_L || *batt_id == BATT_ISL6296_C){
 			cell_info = LGC_LLL; /* LGC Battery */
 		}
@@ -1106,7 +1117,7 @@ static int __devinit max17048_probe(struct i2c_client *client,
 		ret = bq24192_is_ready();
 	else
 		ret = smb349_is_ready();
-#elif defined(CONFIG_MACH_MSM8974_Z_KDDI) || defined(CONFIG_MACH_MSM8974_Z_TMO_US) || defined(CONFIG_MACH_MSM8974_Z_ATT_US)
+#elif defined(CONFIG_MACH_MSM8974_Z_KDDI) || defined(CONFIG_MACH_MSM8974_Z_TMO_US) || defined(CONFIG_MACH_MSM8974_Z_ATT_US) || defined(CONFIG_MACH_MSM8974_B1_KR)
 	ret = bq24192_is_ready();
 #else
 #if defined(CONFIG_MACH_MSM8974_G2_KR) || defined(CONFIG_MACH_MSM8974_G2_ATT) || defined(CONFIG_MACH_MSM8974_G2_TEL_AU)

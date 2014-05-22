@@ -23,7 +23,7 @@
 /* soojung.lim@lge.com, 2013-05-23
  * To use 24MHz GP/GCC_GP clock for V2 H/W
  */
-int g_is_tlmm_spare_reg_value = 0;
+int g_is_tlmm_spare_reg_value;
 
 static struct gpiomux_setting ap2mdm_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
@@ -148,7 +148,6 @@ static struct gpiomux_setting gpio_spi_config = {
 	.drv = GPIOMUX_DRV_12MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
-
 static struct gpiomux_setting gpio_spi_susp_config = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
@@ -197,7 +196,7 @@ static struct gpiomux_setting gpio_epm_config = {
 };
 
 /* LGE_CHANGE_S, [WiFi][hayun.kim@lge.com], 2013-01-22, Wifi Bring Up */
-#if defined (CONFIG_BCMDHD) || defined (CONFIG_BCMDHD_MODULE)
+#if defined(CONFIG_BCMDHD) || defined(CONFIG_BCMDHD_MODULE)
 #else
 static struct gpiomux_setting wcnss_5wire_suspend_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
@@ -693,7 +692,7 @@ static struct msm_gpiomux_config msm_rumi_blsp_configs[] __initdata = {
 	},
 };
 
-#if defined (CONFIG_MACH_LGE)
+#if defined(CONFIG_MACH_LGE)
 static struct msm_gpiomux_config msm_lcd_configs_rev_b[] __initdata = {
 	{
 		.gpio = 58,
@@ -876,13 +875,13 @@ static struct msm_gpiomux_config msm_blsp_configs[] __initdata = {
 #endif
 #ifdef CONFIG_LGE_IRRC
 	{
-		.gpio	   = 85, 		/* BLSP2 UART TX */
+		.gpio	   = 85,		/* BLSP2 UART TX */
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &gpio_uart_config,
 		},
 	},
 	{
-		.gpio	   = 86, 		/* BLSP2 UART RX */
+		.gpio	   = 86,		/* BLSP2 UART RX */
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &gpio_uart_config,
 		},
@@ -1437,7 +1436,7 @@ static struct msm_gpiomux_config msm8974_pri_auxpcm_configs[] __initdata = {
 #endif
 
 /* LGE_CHANGE_S, [WiFi][hayun.kim@lge.com], 2013-01-22, Wifi Bring Up */
-#if defined (CONFIG_BCMDHD) || defined (CONFIG_BCMDHD_MODULE)
+#if defined(CONFIG_BCMDHD) || defined(CONFIG_BCMDHD_MODULE)
 #else
 static struct msm_gpiomux_config wcnss_5wire_interface[] = {
 	{
@@ -1615,21 +1614,21 @@ static struct msm_gpiomux_config slimport_configs[] __initdata = {
 #endif
 
 #ifdef CONFIG_MACH_LGE
-static struct gpiomux_setting headset_active_cfg_gpio65 ={
+static struct gpiomux_setting headset_active_cfg_gpio65  = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_UP,
 	.dir  = GPIOMUX_IN,
 };
 
-static struct gpiomux_setting headset_active_cfg_gpio64 ={
+static struct gpiomux_setting headset_active_cfg_gpio64  = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_UP,
 	.dir  = GPIOMUX_IN,
 };
 
-static struct msm_gpiomux_config headset_configs[] ={
+static struct msm_gpiomux_config headset_configs[]  = {
 	{
 		.gpio = 64,
 		.settings = {
@@ -1744,21 +1743,21 @@ static struct msm_gpiomux_config sensor_configs[] __initdata = {
 
 #if defined(CONFIG_LGE_SM100) || defined(CONFIG_TSPDRV)
 static struct gpiomux_setting vibrator_suspend_cfg = {
-       .func = GPIOMUX_FUNC_GPIO,
-       .drv = GPIOMUX_DRV_2MA,
-       .pull = GPIOMUX_PULL_DOWN,
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_DOWN,
 };
 
 static struct gpiomux_setting vibrator_active_cfg_gpio27 = {
-       .func = GPIOMUX_FUNC_6,
-       .drv = GPIOMUX_DRV_2MA,
-       .pull = GPIOMUX_PULL_NONE,
+	.func = GPIOMUX_FUNC_6,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
 };
 
 static struct gpiomux_setting vibrator_active_cfg_gpio60 = {
-       .func = GPIOMUX_FUNC_GPIO,
-       .drv = GPIOMUX_DRV_2MA,
-       .pull = GPIOMUX_PULL_NONE,
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
 };
 
 static struct msm_gpiomux_config vibrator_configs[] = {
@@ -1956,15 +1955,15 @@ static void msm_gpiomux_sdc4_install(void) {}
 /* LGE_CHANGE_S, [BT][younghyun.kwon@lge.com], 2013-01-29 */
 #ifdef CONFIG_LGE_BLUETOOTH
 static struct gpiomux_setting bt_gpio_uart_active_config = {
-    .func = GPIOMUX_FUNC_2,
-    .drv = GPIOMUX_DRV_8MA,
-    .pull = GPIOMUX_PULL_NONE, /* Should be PULL NONE */
+	.func = GPIOMUX_FUNC_2,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE, /* Should be PULL NONE */
 };
 
 static struct gpiomux_setting bt_gpio_uart_suspend_config = {
-    .func = GPIOMUX_FUNC_GPIO,
-    .drv = GPIOMUX_DRV_2MA,
-    .pull = GPIOMUX_PULL_NONE, /* PULL Configuration */
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE, /* PULL Configuration */
 };
 
 static struct gpiomux_setting bt_rfkill_active_config = {
@@ -2112,19 +2111,19 @@ static struct msm_gpiomux_config bt_pcm_configs[] __initdata = {
 static void bluetooth_msm_gpiomux_install(void)
 {
     /* UART */
-    msm_gpiomux_install(bt_msm_blsp_configs, ARRAY_SIZE(bt_msm_blsp_configs));
+	msm_gpiomux_install(bt_msm_blsp_configs, ARRAY_SIZE(bt_msm_blsp_configs));
 
     /* RFKILL */
-    msm_gpiomux_install(bt_rfkill_configs, ARRAY_SIZE(bt_rfkill_configs));
+	msm_gpiomux_install(bt_rfkill_configs, ARRAY_SIZE(bt_rfkill_configs));
 
     /* HOST WAKE-UP */
-    msm_gpiomux_install(bt_host_wakeup_configs, ARRAY_SIZE(bt_host_wakeup_configs));
+	msm_gpiomux_install(bt_host_wakeup_configs, ARRAY_SIZE(bt_host_wakeup_configs));
 
     /* BT WAKE-UP */
-    msm_gpiomux_install(bt_wakeup_configs, ARRAY_SIZE(bt_wakeup_configs));
+	msm_gpiomux_install(bt_wakeup_configs, ARRAY_SIZE(bt_wakeup_configs));
 
     /* PCM I/F */
-    msm_gpiomux_install(bt_pcm_configs, ARRAY_SIZE(bt_pcm_configs));
+	msm_gpiomux_install(bt_pcm_configs, ARRAY_SIZE(bt_pcm_configs));
 }
 #endif /* CONFIG_LGE_BLUETOOTH */
 /* LGE_CHANGE_E, [BT][younghyun.kwon@lge.com], 2013-01-29 */
@@ -2241,8 +2240,8 @@ void __init msm_8974_init_gpiomux(void)
  * To use 24MHz GP/GCC_GP clock for V2 H/W
  */
 if (socinfo_get_version() >= 0x20000) {
- g_is_tlmm_spare_reg_value = 0x7;
- msm_tlmm_misc_reg_write(TLMM_SPARE_REG, 0x7);
+	g_is_tlmm_spare_reg_value = 0x7;
+	msm_tlmm_misc_reg_write(TLMM_SPARE_REG, 0x7);
 }
 
 #if defined(CONFIG_KS8851) || defined(CONFIG_KS8851_MODULE)
@@ -2266,7 +2265,7 @@ if (socinfo_get_version() >= 0x20000) {
 #endif
 #endif
 /* LGE_CHANGE_S, [WiFi][hayun.kim@lge.com], 2013-01-22, Wifi Bring Up */
-#if defined (CONFIG_BCMDHD) || defined (CONFIG_BCMDHD_MODULE)
+#if defined(CONFIG_BCMDHD) || defined(CONFIG_BCMDHD_MODULE)
 #else
 	msm_gpiomux_install(wcnss_5wire_interface,
 				ARRAY_SIZE(wcnss_5wire_interface));
@@ -2311,16 +2310,16 @@ if (socinfo_get_version() >= 0x20000) {
 
 #ifdef CONFIG_MACH_LGE
 if (lge_get_board_revno() > HW_REV_B)
-	msm_gpiomux_install(headset_configs,ARRAY_SIZE(headset_configs));
+	msm_gpiomux_install(headset_configs, ARRAY_SIZE(headset_configs));
 #endif
 
 #if defined(CONFIG_MACH_LGE)
 	if (lge_get_board_revno() < HW_REV_B)
-		msm_gpiomux_install_nowrite(msm_lcd_configs_rev_b,ARRAY_SIZE(msm_lcd_configs_rev_b));
+		msm_gpiomux_install_nowrite(msm_lcd_configs_rev_b, ARRAY_SIZE(msm_lcd_configs_rev_b));
 	else
-		msm_gpiomux_install_nowrite(msm_lcd_configs_rev_c,ARRAY_SIZE(msm_lcd_configs_rev_c));
+		msm_gpiomux_install_nowrite(msm_lcd_configs_rev_c, ARRAY_SIZE(msm_lcd_configs_rev_c));
 #else
-	msm_gpiomux_install_nowrite(msm_lcd_configs,ARRAY_SIZE(msm_lcd_configs));
+	msm_gpiomux_install_nowrite(msm_lcd_configs, ARRAY_SIZE(msm_lcd_configs));
 #endif
 
 	if (of_board_is_rumi())
@@ -2336,18 +2335,18 @@ if (lge_get_board_revno() > HW_REV_B)
 					ARRAY_SIZE(slimport_configs));
 #endif
 #if defined(CONFIG_MACH_LGE)
-//msm_gpiomux_install(msm_display_configs, ARRAY_SIZE(msm_display_configs));
+/* msm_gpiomux_install(msm_display_configs, ARRAY_SIZE(msm_display_configs)); */
 #endif
 #if 0 /* disable sensor GPIO setting (enable ADSP)*/
 	msm_gpiomux_install(sensor_configs, ARRAY_SIZE(sensor_configs));
 #endif
 #if defined(CONFIG_LGE_SM100) || defined(CONFIG_TSPDRV)
-       msm_gpiomux_install(vibrator_configs, ARRAY_SIZE(vibrator_configs));
+	msm_gpiomux_install(vibrator_configs, ARRAY_SIZE(vibrator_configs));
 #endif
 
 /* LGE_CHANGE_S, [BT][younghyun.kwon@lge.com], 2013-01-29 */
 #ifdef CONFIG_LGE_BLUETOOTH
-    bluetooth_msm_gpiomux_install();
+	bluetooth_msm_gpiomux_install();
 #endif /* CONFIG_LGE_BLUETOOTH */
 /* LGE_CHANGE_E, [BT][younghyun.kwon@lge.com], 2013-01-29 */
 
@@ -2356,19 +2355,19 @@ if (lge_get_board_revno() > HW_REV_B)
  * gpio config for Audience eS325 ALSA SoC Audio driver
  * 2013-01-28, bob.cho@lge.com
  */
-       msm_gpiomux_install(audience_configs, ARRAY_SIZE(audience_configs));
+	msm_gpiomux_install(audience_configs, ARRAY_SIZE(audience_configs));
 #endif /*CONFIG_SND_SOC_ES325_SLIM*/
 #ifdef CONFIG_NFC_BCM2079X
 	msm_gpiomux_install(msm8974_nfc_configs, ARRAY_SIZE(msm8974_nfc_configs));
 #endif
 #if defined(CONFIG_MACH_LGE) /* LGE_HALL_IC */
-	switch(lge_get_board_revno()) {
-		case HW_REV_A:
-			msm_gpiomux_install(msm_hall_ic_configs_rev_a, ARRAY_SIZE(msm_hall_ic_configs_rev_a));
-			break;
-		case HW_REV_B:
-		default:
-			msm_gpiomux_install(msm_hall_ic_configs_rev_b, ARRAY_SIZE(msm_hall_ic_configs_rev_b));
+	switch (lge_get_board_revno()) {
+	case HW_REV_A:
+		msm_gpiomux_install(msm_hall_ic_configs_rev_a, ARRAY_SIZE(msm_hall_ic_configs_rev_a));
+		break;
+	case HW_REV_B:
+	default:
+		msm_gpiomux_install(msm_hall_ic_configs_rev_b, ARRAY_SIZE(msm_hall_ic_configs_rev_b));
 			break;
 	}
 #endif
@@ -2377,17 +2376,17 @@ if (lge_get_board_revno() > HW_REV_B)
  * Camera bring up - Separate Rev.B and C setting
  * 2013-03-20, youmi.jun@lge.com
  */
-	switch(lge_get_board_revno()) {
-		case HW_REV_B:
-			msm_gpiomux_install(msm_sensor_configs_rev_b, ARRAY_SIZE(msm_sensor_configs_rev_b));
-			break;
-		case HW_REV_C:
-		default:
-			msm_gpiomux_install(msm_sensor_configs_rev_c, ARRAY_SIZE(msm_sensor_configs_rev_c));
+	switch (lge_get_board_revno()) {
+	case HW_REV_B:
+		msm_gpiomux_install(msm_sensor_configs_rev_b, ARRAY_SIZE(msm_sensor_configs_rev_b));
+		break;
+	case HW_REV_C:
+	default:
+		msm_gpiomux_install(msm_sensor_configs_rev_c, ARRAY_SIZE(msm_sensor_configs_rev_c));
 			break;
 	}
 /* LGE_CHANGE_E, Camera bring up - Separate Rev.B and C setting */
-#endif //#if defined(CONFIG_MACH_LGE)
+#endif /* #if defined(CONFIG_MACH_LGE) */
 
 	if (of_board_is_dragonboard() && machine_is_apq8074())
 		msm_gpiomux_install(apq8074_dragonboard_ts_config,

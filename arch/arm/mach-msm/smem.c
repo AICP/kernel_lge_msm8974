@@ -850,9 +850,52 @@ EXPORT_SYMBOL(smem_get_entry_no_rlock);
  */
 remote_spinlock_t *smem_get_remote_spinlock(void)
 {
+	if (unlikely(!spinlocks_initialized))
+		init_smem_remote_spinlock();
 	return &remote_spinlock;
 }
 EXPORT_SYMBOL(smem_get_remote_spinlock);
+
+/**
+ * smem_get_free_space() - Get the available allocation free space for a
+ *				partition
+ *
+ * @to_proc: remote SMEM host.  Determines the applicable partition
+ * @returns: size in bytes available to allocate
+ *
+ * Helper function for SMD so that SMD only scans the channel allocation
+ * table for a partition when it is reasonably certain that a channel has
+ * actually been created, because scanning can be expensive.  Creating a channel
+ * will consume some of the free space in a partition, so SMD can compare the
+ * last free space size against the current free space size to determine if
+ * a channel may have been created.  SMD can't do this directly, because the
+ * necessary partition internals are restricted to just SMEM.
+ */
+unsigned smem_get_free_space(unsigned to_proc)
+{
+	struct smem_partition_header *hdr;
+	struct smem_shared *shared;
+
+	if (to_proc >= NUM_SMEM_SUBSYSTEMS) {
+		pr_err("%s: invalid to_proc:%d\n", __func__, to_proc);
+		return UINT_MAX;
+	}
+
+	if (partitions[to_proc].offset) {
+		if (unlikely(OVERFLOW_ADD_UNSIGNED(uintptr_t,
+					(uintptr_t)smem_areas[0].virt_addr,
+					partitions[to_proc].offset))) {
+			pr_err("%s: unexpected overflow detected\n", __func__);
+			return UINT_MAX;
+		}
+		hdr = smem_areas[0].virt_addr + partitions[to_proc].offset;
+		return hdr->offset_free_cached - hdr->offset_free_uncached;
+	} else {
+		shared = (void *)MSM_SHARED_RAM_BASE;
+		return shared->heap_info.heap_remaining;
+	}
+}
+EXPORT_SYMBOL(smem_get_free_space);
 
 /**
  * init_smem_remote_spinlock - Reentrant remote spinlock initialization
@@ -921,8 +964,17 @@ bool smem_initialized_check(void)
 									true);
 	if (version_array == NULL)
 		goto failed;
-	if (version_array[MODEM_SBL_VERSION_INDEX] != SMEM_VERSION << 16)
+
+	/*
+	 * The Modem SBL is now the Master SBL version and is required to
+	 * pre-initialize SMEM and fill in any necessary configuration
+	 * structures.  Without the extra configuration data, the SMEM driver
+	 * cannot be properly initialized.
+	 */
+	if (version_array[MODEM_SBL_VERSION_INDEX] != SMEM_VERSION << 16) {
+		pr_err("%s: SBL version not correct\n", __func__);
 		goto failed;
+	}
 
 	is_inited = 1;
 	checked = 1;
@@ -933,7 +985,8 @@ failed:
 	is_inited = 0;
 	checked = 1;
 	spin_unlock_irqrestore(&smem_init_check_lock, flags);
-	LOG_ERR("%s: bootloader failure detected, shared memory not inited\n",
+	LOG_ERR(
+		"%s: shared memory needs to be initialized by SBL before booting\n",
 								__func__);
 	return is_inited;
 }

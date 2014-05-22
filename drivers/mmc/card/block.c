@@ -43,6 +43,9 @@
 #include <linux/mmc/sd.h>
 
 #include <asm/uaccess.h>
+#ifdef CONFIG_MACH_MSM8974_B1_KR
+#include <mach/board_lge.h>
+#endif
 
 #include "queue.h"
 
@@ -1469,11 +1472,18 @@ static int mmc_blk_err_check(struct mmc_card *card,
 	int ecc_err = 0, gen_err = 0;
 
 	#ifdef CONFIG_MACH_LGE
-	if(card->host->index == 2 && !mmc_cd_get_status(card->host))
+	#ifndef CONFIG_MACH_MSM8974_B1_KR
+	if (card->host->index == 2 && !mmc_cd_get_status(card->host)) {
+		printk(KERN_INFO "[LGE][MMC][%-18s( )] sd-no-exist, skip next\n", __func__);
+		return MMC_BLK_NOMEDIUM;
+	}
+	#else // for b1 to fix sd host index
+	if (card->host->index == 1 && !mmc_cd_get_status(card->host))
 	{
 		printk(KERN_INFO "[LGE][MMC][%-18s( )] sd-no-exist, skip next\n", __func__);
 		return MMC_BLK_NOMEDIUM;
 	}
+	#endif
 	#endif
 
 	/*
@@ -1520,6 +1530,14 @@ static int mmc_blk_err_check(struct mmc_card *card,
 		u32 status;
 		unsigned long timeout;
 
+		#ifdef CONFIG_MACH_LGE
+		/* LGE_CHANGE, 2013/12/02, G2-KK-FS@lge.com
+		 * Apply for more information in case of IOWAIT-cpu-long-occupation
+		 */
+		unsigned long timeout_5s;
+		unsigned long time_in_stuck = 0;
+		#endif
+
 		/* Check stop command response */
 		if (brq->stop.resp[0] & R1_ERROR) {
 			pr_err("%s: %s: general error sending stop command, stop cmd response %#x\n",
@@ -1529,6 +1547,14 @@ static int mmc_blk_err_check(struct mmc_card *card,
 		}
 
 		timeout = jiffies + msecs_to_jiffies(MMC_BLK_TIMEOUT_MS);
+
+		#ifdef CONFIG_MACH_LGE
+		/* LGE_CHANGE, 2013/12/02, G2-KK-FS@lge.com
+		 * Apply for more information in case of IOWAIT-cpu-long-occupation
+		 */
+		timeout_5s = jiffies + msecs_to_jiffies(5000);
+		#endif
+
 		do {
 			int err = get_card_status(card, &status, 5);
 			if (err) {
@@ -1554,6 +1580,19 @@ static int mmc_blk_err_check(struct mmc_card *card,
 
 				return MMC_BLK_CMD_ERR;
 			}
+			#ifdef CONFIG_MACH_LGE
+			/* LGE_CHANGE, 2013/12/02, G2-KK-FS@lge.com
+			 * Apply for more information in case of IOWAIT-cpu-long-occupation
+			 */
+			else if(time_after(jiffies, timeout_5s)) {
+				time_in_stuck += 5;
+				pr_warning("%s: might be stuck in programming state"\
+				", elasped = %ld seconds %s %s\n", mmc_hostname(card->host),
+				time_in_stuck, req->rq_disk->disk_name, __func__);
+				timeout_5s = jiffies + msecs_to_jiffies(5000);
+			}
+			#endif
+
 			/*
 			 * Some cards mishandle the status bits,
 			 * so make sure to check both the busy
@@ -3125,8 +3164,6 @@ static const struct mmc_fixup blk_fixups[] =
 		  MMC_QUIRK_SEC_ERASE_TRIM_BROKEN),
 	MMC_FIXUP("VZL00M", CID_MANFID_SAMSUNG, CID_OEMID_ANY, add_quirk_mmc,
 		  MMC_QUIRK_SEC_ERASE_TRIM_BROKEN),
-	MMC_FIXUP(CID_NAME_ANY, CID_MANFID_HYNIX, CID_OEMID_ANY, add_quirk_mmc,
-		  MMC_QUIRK_BROKEN_DATA_TIMEOUT),
 
 	END_FIXUP
 };

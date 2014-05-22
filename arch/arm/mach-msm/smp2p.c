@@ -71,7 +71,7 @@ struct smp2p_out_list_item {
 static struct smp2p_out_list_item out_list[SMP2P_NUM_PROCS];
 
 static void *log_ctx;
-static int smp2p_debug_mask = MSM_SMP2P_INFO;
+static int smp2p_debug_mask = MSM_SMP2P_INFO | MSM_SMP2P_DEBUG;
 module_param_named(debug_mask, smp2p_debug_mask,
 		   int, S_IRUGO | S_IWUSR | S_IWGRP);
 
@@ -391,7 +391,7 @@ static void *smp2p_get_remote_smem_item(int remote_pid,
 	struct smp2p_out_list_item *out_item)
 {
 	void *item_ptr = NULL;
-	unsigned size;
+	unsigned size = 0;
 
 	if (!out_item)
 		return item_ptr;
@@ -1329,7 +1329,7 @@ int msm_smp2p_in_read(int remote_pid, const char *name, uint32_t *data)
 {
 	unsigned long flags;
 	struct smp2p_out_list_item *out_item;
-	uint32_t *entry_ptr;
+	uint32_t *entry_ptr = NULL;
 
 	if (remote_pid >= SMP2P_NUM_PROCS)
 		return -EINVAL;

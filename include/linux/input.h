@@ -167,6 +167,7 @@ struct input_keymap_entry {
 #define INPUT_PROP_DIRECT		0x01	/* direct input devices */
 #define INPUT_PROP_BUTTONPAD		0x02	/* has button(s) under pad */
 #define INPUT_PROP_SEMI_MT		0x03	/* touch rectangle only */
+#define INPUT_PROP_NO_DUMMY_RELEASE	0x04	/* no dummy event */
 
 #define INPUT_PROP_MAX			0x1f
 #define INPUT_PROP_CNT			(INPUT_PROP_MAX + 1)
@@ -198,8 +199,6 @@ struct input_keymap_entry {
 #define SYN_CONFIG		1
 #define SYN_MT_REPORT		2
 #define SYN_DROPPED		3
-#define SYN_TIME_SEC		4
-#define SYN_TIME_NSEC		5
 
 /*
  * Keys and buttons
@@ -1320,9 +1319,7 @@ struct input_dev {
 	struct mutex mutex;
 
 	unsigned int users;
-	unsigned int users_private;
 	bool going_away;
-	bool disabled;
 
 	bool sync;
 

@@ -269,7 +269,7 @@ int _fat_fallocate(struct inode *inode, loff_t len)
 		return 0;
 	}
 
-	nblocks = (len + sb->s_blocksize - 1 ) >> sb->s_blocksize_bits;
+	nblocks = (len + sb->s_blocksize - 1) >> sb->s_blocksize_bits;
 	iblock = (MSDOS_I(inode)->mmu_private + sb->s_blocksize - 1) >> sb->s_blocksize_bits;
 
 	/* validate new size */

@@ -904,9 +904,7 @@ struct mmc_async_req *mmc_start_req(struct mmc_host *host,
 			mmc_post_req(host, host->areq->mrq, 0);
 			host->areq = NULL;
 			if (areq) {
-				if (!(areq->cmd_flags & (REQ_URGENT
-							 | REQ_FUA
-							 | REQ_FLUSH))) {
+				if (!(areq->cmd_flags & REQ_URGENT)) {
 					areq->reinsert_req(areq);
 					mmc_post_req(host, areq->mrq, 0);
 				} else {
@@ -1078,7 +1076,6 @@ int mmc_interrupt_hpi(struct mmc_card *card)
 	err = mmc_send_hpi_cmd(card, &status);
 
 	prg_wait = jiffies + msecs_to_jiffies(card->ext_csd.out_of_int_time);
-
 	do {
 		err = mmc_send_status(card, &status);
 
@@ -1094,14 +1091,14 @@ int mmc_interrupt_hpi(struct mmc_card *card)
 	} while (!err);
 
 out:
-	#ifdef CONFIG_MACH_LGE
-		/* LGE_CHANGE
-		* add debug code
-		* 2013-07-08, G2-FS@lge.com
-		*/
-		if (err)
-			pr_err("%s: mmc_interrupt_hpi() failed. err: (%d)\n",	mmc_hostname(card->host), err);
-	#endif
+#ifdef CONFIG_MACH_LGE
+	/* LGE_CHANGE
+	* add debug code
+	* 2013-07-08, G2-FS@lge.com
+	*/
+	if (err)
+		pr_err("%s: mmc_interrupt_hpi() failed. err: (%d)\n",	mmc_hostname(card->host), err);
+#endif
 	mmc_release_host(card->host);
 	return err;
 }
@@ -1336,11 +1333,6 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 	if (card->quirks & MMC_QUIRK_INAND_DATA_TIMEOUT) {
 		data->timeout_ns = 4000000000u; /* 4s */
 		data->timeout_clks = 0;
-	}
-	/* Some emmc cards require a longer read/write time */
-	if (card->quirks & MMC_QUIRK_BROKEN_DATA_TIMEOUT) {
-		if (data->timeout_ns <  4000000000u)
-			data->timeout_ns = 4000000000u;	/* 4s */
 	}
 }
 EXPORT_SYMBOL(mmc_set_data_timeout);
@@ -1963,7 +1955,7 @@ void mmc_power_off(struct mmc_host *host)
 		/* LGE_CHANGE, 2013-07-09, G2-FS@lge.com
 		* If it is already power-off, skip below.
 		*/
-		if(host->ios.power_mode == MMC_POWER_OFF) {
+		if (host->ios.power_mode == MMC_POWER_OFF) {
 			printk(KERN_INFO "[LGE][MMC][%-18s( )] host->index:%d, already power-off, skip below\n", __func__, host->index);
 			return;
 		}
@@ -2141,7 +2133,13 @@ void mmc_detect_change(struct mmc_host *host, unsigned long delay)
 	spin_unlock_irqrestore(&host->lock, flags);
 #endif
 	host->detect_change = 1;
-
+#ifdef CONFIG_MACH_LGE
+/*
+ * LGE_UPDATE, 2013/09/10, G2-KK-FS@lge.com
+ * add wake_lock because of lockup issue when copying/moving big size files
+ */
+	wake_lock(&host->detect_wake_lock);
+#endif
 	mmc_schedule_delayed_work(&host->detect, delay);
 }
 
@@ -3275,7 +3273,14 @@ void mmc_rescan(struct work_struct *work)
  out:
 	if (extend_wakelock)
 		wake_lock_timeout(&host->detect_wake_lock, HZ / 2);
-
+#ifdef CONFIG_MACH_LGE
+/*
+ * LGE_UPDATE, 2013/09/10, G2-KK-FS@lge.com
+ * add wake_lock because of lockup issue when copying/moving big size files
+ */
+	else
+		wake_unlock(&host->detect_wake_lock);
+#endif
 	if (host->caps & MMC_CAP_NEEDS_POLL)
 		mmc_schedule_delayed_work(&host->detect, HZ);
 }
@@ -3698,6 +3703,13 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 		}
 		host->rescan_disable = 0;
 		spin_unlock_irqrestore(&host->lock, flags);
+#ifdef CONFIG_BCMDHD_MODULE
+		/* This patch is for nonremovable 0 case of BCM WiFi */
+		if (host->card && mmc_card_sdio(host->card)) {
+			printk("J:%s-mmc_card_sdio, host->index=%d\n", __FUNCTION__, host->index);
+			return 0;
+		}
+#endif  /* CONFIG_BCMDHD_MODULE */
 		mmc_detect_change(host, 0);
 		break;
 
