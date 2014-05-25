@@ -296,7 +296,7 @@ static void bluesleep_sleep_work(struct work_struct *work)
 		}
 /* LG_BTUI : chanha.park@lge.com : Enable Bluesleep-[S] */
 #ifndef CONFIG_LGE_BLUESLEEP
-		if (msm_hs_tx_empty(bsi->uport)) {
+		if (1==1 /*msm_hs_tx_empty(bsi->uport)*/) {
 #endif /*CONFIG_LGE_BLUESLEEP*/			
 /* LG_BTUI : chanha.park@lge.com : Enable Bluesleep-[E] */
 			BT_DBG("going to sleep...");
