@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,7 +28,11 @@ static DEFINE_SPINLOCK(tz_lock);
  * FLOOR is 5msec to capture up to 3 re-draws
  * per frame for 60fps content.
  */
-#define FLOOR			5000
+#define FLOOR		        5000
+/*
+ * MIN_BUSY is 1 msec for the sample to be sent
+ */
+#define MIN_BUSY		1000
 #define LONG_FLOOR		50000
 #define HIST			5
 #define TARGET			80
@@ -43,7 +47,11 @@ static DEFINE_SPINLOCK(tz_lock);
 #define TZ_UPDATE_ID		0x4
 #define TZ_INIT_ID		0x6
 
+#define DEVFREQ_ADRENO_TZ	"msm-adreno-tz"
 #define TAG "msm_adreno_tz: "
+
+static unsigned int tz_target = TARGET;
+static unsigned int tz_cap = CAP;
 
 /* Trap into the TrustZone, and call funcs there. */
 static int __secure_tz_entry2(u32 cmd, u32 val1, u32 val2)
@@ -116,11 +124,13 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 	/*
 	 * Do not waste CPU cycles running this algorithm if
 	 * the GPU just started, or if less than FLOOR time
-	 * has passed since the last run.
+	 * has passed since the last run or the gpu hasn't been
+	 * busier than MIN_BUSY.
 	 */
 	if ((stats.total_time == 0) ||
-		(priv->bin.total_time < FLOOR)) {
-		return 1;
+		(priv->bin.total_time < FLOOR) ||
+		(unsigned int) priv->bin.busy_time < MIN_BUSY) {
+		return 0;
 	}
 
 	level = devfreq_get_freq_level(devfreq, stats.current_frequency);
@@ -175,13 +185,13 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 		 * Normalize by gpu_time unless it is a small fraction of
 		 * the total time interval.
 		 */
-		norm_cycles = (100 * norm_cycles) / TARGET;
+		norm_cycles = (100 * norm_cycles) / tz_target;
 		act_level = priv->bus.index[level] + b.mod;
 		act_level = (act_level < 0) ? 0 : act_level;
 		act_level = (act_level >= priv->bus.num) ?
 			(priv->bus.num - 1) : act_level;
 		if (norm_cycles > priv->bus.up[act_level] &&
-			gpu_percent > CAP)
+			gpu_percent > tz_cap)
 			*flag = DEVFREQ_FLAG_FAST_HINT;
 		else if (norm_cycles < priv->bus.down[act_level] && level)
 			*flag = DEVFREQ_FLAG_SLOW_HINT;
@@ -302,6 +312,66 @@ static int tz_suspend(struct devfreq *devfreq)
 	return 0;
 }
 
+static ssize_t adreno_tz_target_show(struct kobject *kobj,
+						struct kobj_attribute *attr,
+						char *buf)
+{
+	return sprintf(buf, "%d\n", tz_target);
+}
+
+static ssize_t adreno_tz_target_store(struct kobject *kobj,
+					   struct kobj_attribute *attr,
+					   const char *buf, size_t count)
+{
+	unsigned int val;
+
+	sscanf(buf, "%d", &val);
+	if (val > 100 || val < tz_cap)
+		return -EINVAL;
+
+	tz_target = val;
+
+	return count;
+}
+
+static ssize_t adreno_tz_cap_show(struct kobject *kobj,
+					       struct kobj_attribute *attr,
+					       char *buf)
+{
+	return sprintf(buf, "%d\n", tz_cap);
+}
+
+static ssize_t adreno_tz_cap_store(struct kobject *kobj,
+						struct kobj_attribute *attr,
+						const char *buf, size_t count)
+{
+	unsigned int val;
+
+	sscanf(buf, "%d", &val);
+	if (val > tz_target)
+		return -EINVAL;
+
+	tz_cap = val;
+
+	return count;
+}
+
+static struct kobj_attribute target_attribute =
+	__ATTR(target, 0664, adreno_tz_target_show, adreno_tz_target_store);
+static struct kobj_attribute cap_attribute =
+	__ATTR(cap, 0664, adreno_tz_cap_show, adreno_tz_cap_store);
+
+static struct attribute *attrs[] = {
+	&target_attribute.attr,
+	&cap_attribute.attr,
+	NULL,
+};
+
+static struct attribute_group attr_group = {
+	.attrs = attrs,
+	.name = DEVFREQ_ADRENO_TZ,
+};
+
 static int tz_handler(struct devfreq *devfreq, unsigned int event, void *data)
 {
 	int result;
@@ -310,9 +380,11 @@ static int tz_handler(struct devfreq *devfreq, unsigned int event, void *data)
 	switch (event) {
 	case DEVFREQ_GOV_START:
 		result = tz_start(devfreq);
+		result = devfreq_policy_add_files(devfreq, attr_group);
 		break;
 
 	case DEVFREQ_GOV_STOP:
+		devfreq_policy_remove_files(devfreq, attr_group);
 		result = tz_stop(devfreq);
 		break;
 

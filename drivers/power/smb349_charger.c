@@ -2039,7 +2039,7 @@ static void smb349_bb_worker(struct work_struct *work)
 	int ret;
 
 	chg_current = smb349_get_prop_batt_current_now(smb349_chg);
-	smb349_console_silent = 0;
+	smb349_console_silent = 1;
 
 	if (chg_current < DISCHARGE_CURRENT * 1000) {
 		pr_debug("discharging case\n");
@@ -3547,7 +3547,7 @@ static void smb349_batt_external_power_changed(struct power_supply *psy)
 			smb349_set_usb_5_1_mode(smb349_chg, 0);
 			vzw_fast_chg_change_usb_charging_state(smb349_chg);
 		}
-		pr_info("VZW_CHG_PRESENT = USB_PRESENT\n");
+		//pr_info("VZW_CHG_PRESENT = USB_PRESENT\n");
 #else
 #if SMB349_BOOSTBACK_WORKAROUND
 		if (smb349_chg->is_bb_work_case)
@@ -4059,6 +4059,7 @@ static void smb349_status_print(struct smb349_struct *smb349_chg)
 	smb349_chg->batt_psy.get_property(&(smb349_chg->batt_psy),
 			  POWER_SUPPLY_PROP_CHARGE_TYPE, &ret);
 
+#if 0
 	printk(KERN_ERR "[chglog]EN:%d ERR:%d STAT:%c M:%c U:%d EOC:%d RE:%d BL:%c BO:%d BM:%d HOFF:%d TO:%c SYS:%d IT:%d TEMP:0x%02X PSY:[PRE:%d,ON:%d-%d,TYP:%d]\n",
 			val_3d & BIT(0)? 1: 0,		/* EN:charging enable */
 			val_3d & BIT(6)? 1: 0,		/* ERR:charging error */
@@ -4079,6 +4080,7 @@ static void smb349_status_print(struct smb349_struct *smb349_chg)
 			smb349_chg->usb_online, smb349_chg->ac_online, /* ON: power_supply online usb_online-ac_online */
 			ret.intval			/* TYP: power_supply charger type*/
 		);
+#endif
 }
 #endif
 

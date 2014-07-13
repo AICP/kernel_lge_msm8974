@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -67,7 +67,8 @@ void kgsl_pwrscale_wake(struct kgsl_device *device)
 
 	device->pwrscale.time = ktime_to_us(ktime_get());
 
-	device->pwrscale.next_governor_call = 0;
+	device->pwrscale.next_governor_call = jiffies +
+			msecs_to_jiffies(KGSL_GOVERNOR_CALL_INTERVAL);
 
 	/* to call devfreq_resume_device() from a kernel thread */
 	queue_work(device->pwrscale.devfreq_wq,
@@ -109,9 +110,6 @@ void kgsl_pwrscale_update(struct kgsl_device *device)
 
 	if (!device->pwrscale.enabled)
 		return;
-
-	if (device->pwrscale.next_governor_call == 0)
-		device->pwrscale.next_governor_call = jiffies;
 
 	if (time_before(jiffies, device->pwrscale.next_governor_call))
 		return;
@@ -196,8 +194,16 @@ int kgsl_devfreq_target(struct device *dev, unsigned long *freq, u32 flags)
 		return 0;
 
 	pwr = &device->pwrctrl;
+	if (flags & DEVFREQ_FLAG_WAKEUP_MAXFREQ) {
+		/*
+		 * The GPU is about to get suspended,
+		 * but it needs to be at the max power level when waking up
+		*/
+		pwr->wakeup_maxpwrlevel = 1;
+		return 0;
+	}
 
-	mutex_lock(&device->mutex);
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 	cur_freq = kgsl_pwrctrl_active_freq(pwr);
 	level = pwr->active_pwrlevel;
 
@@ -227,10 +233,27 @@ int kgsl_devfreq_target(struct device *dev, unsigned long *freq, u32 flags)
 			kgsl_pwrctrl_buslevel_update(device, true);
 	}
 
-	kgsl_pwrctrl_pwrlevel_change(device, level);
-	*freq = kgsl_pwrctrl_active_freq(pwr);
+	/*
+	 * The power constraints need an entire interval to do their magic, so
+	 * skip changing the powerlevel if the time hasn't expired yet  and the
+	 * new level is less than the constraint
+	 */
+	if ((pwr->constraint.type != KGSL_CONSTRAINT_NONE) &&
+		(!time_after(jiffies, pwr->constraint.expires)) &&
+		(level >= pwr->constraint.hint.pwrlevel.level))
+			*freq = cur_freq;
+	else {
+		/* Change the power level */
+		kgsl_pwrctrl_pwrlevel_change(device, level);
 
-	mutex_unlock(&device->mutex);
+		/*Invalidate the constraint set */
+		pwr->constraint.type = KGSL_CONSTRAINT_NONE;
+		pwr->constraint.expires = 0;
+
+		*freq = kgsl_pwrctrl_active_freq(pwr);
+	}
+
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 	return 0;
 }
 EXPORT_SYMBOL(kgsl_devfreq_target);
@@ -257,7 +280,7 @@ int kgsl_devfreq_get_dev_status(struct device *dev,
 
 	pwrscale = &device->pwrscale;
 
-	mutex_lock(&device->mutex);
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 	/* make sure we don't turn on clocks just to read stats */
 	if (device->state == KGSL_STATE_ACTIVE) {
 		struct kgsl_power_stats extra;
@@ -285,7 +308,7 @@ int kgsl_devfreq_get_dev_status(struct device *dev,
 	trace_kgsl_pwrstats(device, stat->total_time, &pwrscale->accum_stats);
 	memset(&pwrscale->accum_stats, 0, sizeof(pwrscale->accum_stats));
 
-	mutex_unlock(&device->mutex);
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 
 	return 0;
 }
@@ -308,9 +331,9 @@ int kgsl_devfreq_get_cur_freq(struct device *dev, unsigned long *freq)
 	if (freq == NULL)
 		return -EINVAL;
 
-	mutex_lock(&device->mutex);
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 	*freq = kgsl_pwrctrl_active_freq(&device->pwrctrl);
-	mutex_unlock(&device->mutex);
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 
 	return 0;
 }
@@ -399,11 +422,11 @@ int kgsl_pwrscale_init(struct device *dev, const char *governor)
 	/* Let's start with 10 ms and tune in later */
 	profile->polling_ms = 10;
 
-	/* do not include the 'off' level or duplicate freq. levels */
-	for (i = 0; i < (pwr->num_pwrlevels - 1); i++)
+	/* do not include duplicate freq. levels */
+	for (i = 0; i < pwr->num_pwrlevels; i++)
 		pwrscale->freq_table[out++] = pwr->pwrlevels[i].gpu_freq;
 
-	profile->max_state = out;
+	profile->max_state = out - 1;
 	/* link storage array to the devfreq profile pointer */
 	profile->freq_table = pwrscale->freq_table;
 
@@ -449,12 +472,15 @@ int kgsl_pwrscale_init(struct device *dev, const char *governor)
 	ret = sysfs_create_link(&device->dev->kobj,
 			&devfreq->dev.kobj, "devfreq");
 
-	pwrscale->devfreq_wq = create_freezable_workqueue("kgsl_devfreq_wq");
+	pwrscale->devfreq_wq = alloc_workqueue("kgsl_devfreq_wq", WQ_HIGHPRI |
+					       WQ_UNBOUND | WQ_FREEZABLE |
+					       WQ_MEM_RECLAIM, 0);
 	INIT_WORK(&pwrscale->devfreq_suspend_ws, do_devfreq_suspend);
 	INIT_WORK(&pwrscale->devfreq_resume_ws, do_devfreq_resume);
 	INIT_WORK(&pwrscale->devfreq_notify_ws, do_devfreq_notify);
 
-	pwrscale->next_governor_call = 0;
+	pwrscale->next_governor_call = jiffies +
+			msecs_to_jiffies(KGSL_GOVERNOR_CALL_INTERVAL);
 
 	return 0;
 }

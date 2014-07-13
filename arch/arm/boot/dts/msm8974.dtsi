@@ -760,14 +760,6 @@
 	sound {
 		compatible = "qcom,msm8974-audio-taiko";
 		qcom,model = "msm8974-taiko-snd-card";
-		reg = <0xfe02b000 0x4>,
-		      <0xfe02c000 0x4>,
-		      <0xfe02d000 0x4>,
-		      <0xfe02e000 0x4>;
-		reg-names = "lpaif_pri_mode_muxsel",
-			    "lpaif_sec_mode_muxsel",
-			    "lpaif_tert_mode_muxsel",
-			    "lpaif_quat_mode_muxsel";
 
 		qcom,audio-routing =
 			"RX_BIAS", "MCLK",
@@ -1014,7 +1006,6 @@
 		compatible = "qcom,msm-pcm-dsp";
 		qcom,msm-pcm-dsp-id = <1>;
 		qcom,msm-pcm-low-latency;
-		qcom,latency-level = "regular";
 	};
 
 	qcom,msm-pcm-routing {
@@ -1060,10 +1051,6 @@
 
 	qcom,msm-lsm-client {
 		compatible = "qcom,msm-lsm-client";
-	};
-
-	qti,msm-pcm-loopback {
-		compatible = "qti,msm-pcm-loopback";
 	};
 
 	qcom,msm-dai-q6 {
@@ -1550,25 +1537,17 @@
 		compatible = "qcom,msm-thermal";
 		qcom,sensor-id = <5>;
 		qcom,poll-ms = <250>;
-		qcom,limit-temp = <60>;
-		qcom,temp-hysteresis = <10>;
-		qcom,freq-step = <2>;
+		qcom,limit-temp = <90>;
+		qcom,temp-hysteresis = <5>;
+		qcom,freq-step = <1>;
 		qcom,freq-control-mask = <0xf>;
-		qcom,core-limit-temp = <80>;
-		qcom,core-temp-hysteresis = <10>;
+		qcom,core-limit-temp = <110>;
+		qcom,core-temp-hysteresis = <5>;
 		qcom,core-control-mask = <0xe>;
-		qcom,hotplug-temp = <110>;
-		qcom,hotplug-temp-hysteresis = <20>;
-		qcom,cpu-sensors = "tsens_tz_sensor5", "tsens_tz_sensor6",
-				"tsens_tz_sensor7", "tsens_tz_sensor8";
-		qcom,freq-mitigation-temp = <110>;
-		qcom,freq-mitigation-temp-hysteresis = <20>;
-		qcom,freq-mitigation-value = <960000>;
-		qcom,freq-mitigation-control-mask = <0x01>;
 		qcom,vdd-restriction-temp = <5>;
 		qcom,vdd-restriction-temp-hysteresis = <10>;
-		qcom,pmic-sw-mode-temp = <85>;
-		qcom,pmic-sw-mode-temp-hysteresis = <75>;
+		qcom,pmic-sw-mode-temp = <100>;
+		qcom,pmic-sw-mode-temp-hysteresis = <95>;
 		qcom,pmic-sw-mode-regs = "vdd-dig";
 		vdd-dig-supply = <&pm8841_s2_floor_corner>;
 		vdd-gfx-supply = <&pm8841_s4_floor_corner>;
