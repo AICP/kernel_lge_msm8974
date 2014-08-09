@@ -40,14 +40,20 @@
 #define DEFAULT_MIN_TIME_CPU_ONLINE 1
 #define DEFAULT_TIMER 1
 
-static struct cpu_stats
+#define MIN_CPU_UP_US 1000 * USEC_PER_MSEC;
+#define NUM_POSSIBLE_CPUS num_possible_cpus()
+#define HIGH_LOAD 95
+
+extern bool boosted;
+
+struct cpu_stats
 {
+	unsigned int online_cpus;
 	unsigned int counter[2];
-	unsigned long timestamp[2];
 	struct notifier_block notif;
+	u64 timestamp[2];
 } stats = {
-	.counter = 0,
-	.timestamp = 0,
+	.counter = {0},
 };
 
 struct hotplug_tunables
@@ -100,36 +106,9 @@ static DEFINE_PER_CPU(struct cpu_load_data, cpuload);
 
 static struct workqueue_struct *wq;
 static struct delayed_work decide_hotplug;
-static struct work_struct suspend;
-static struct work_struct resume;
+static struct work_struct suspend, resume;
 
-static inline int get_cpu_load(unsigned int cpu)
-{
-	struct cpu_load_data *pcpu = &per_cpu(cpuload, cpu);
-	struct cpufreq_policy policy;
-	u64 cur_wall_time, cur_idle_time;
-	unsigned int idle_time, wall_time;
-	unsigned int cur_load;
-
-	cpufreq_get_policy(&policy, cpu);
-
-	cur_idle_time = get_cpu_idle_time(cpu, &cur_wall_time, true);
-
-	wall_time = (unsigned int) (cur_wall_time - pcpu->prev_cpu_wall);
-	pcpu->prev_cpu_wall = cur_wall_time;
-
-	idle_time = (unsigned int) (cur_idle_time - pcpu->prev_cpu_idle);
-	pcpu->prev_cpu_idle = cur_idle_time;
-
-	if (unlikely(!wall_time || wall_time < idle_time))
-		return 0;
-
-	cur_load = 100 * (wall_time - idle_time) / wall_time;
-
-	return (cur_load * policy.cur) / policy.max;
-}
-
-static void cpu_revive(unsigned int cpu)
+static void cpu_revive(unsigned int cpu, unsigned int load)
 {
 	struct hotplug_tunables *t = &tunables;
 
@@ -138,118 +117,103 @@ static void cpu_revive(unsigned int cpu)
 	 * cpu in question. If the device is under stress for at least 200ms
 	 * online the cpu, no questions asked. 200ms here equals two samples
 	 */
-	if (load >= HIGH_LOAD && stats.counter >= 2)
+	if (load >= HIGH_LOAD && stats.counter[cpu - 2] >= 2)
 	{
-		goto online_all;
+		cpu_up(cpu);
 	}
-	else if (!(stats.counter >= t->high_load_counter))
+	else if (stats.counter[cpu - 2] >= t->high_load_counter)
 	{
-		return;
+		cpu_up(cpu);
+		stats.timestamp[cpu - 2] = ktime_to_us(ktime_get());
 	}
 
-online_all:
-	cpus_online_work();
-	stats.timestamp = ktime_to_us(ktime_get());	
 	stats.online_cpus = num_online_cpus();
 }
 
-static void cpu_smash(void)
+static void cpu_smash(unsigned int cpu)
 {
 	struct hotplug_tunables *t = &tunables;
 	u64 extra_time = MIN_CPU_UP_US;
 
-	if (stats.counter >= t->high_load_counter)
-    {
-		return;
-    }
-    
 	/*
 	 * offline the cpu only if its freq is lower than
 	 * CPUFREQ_UNPLUG_LIMIT. Else update the timestamp to now and
 	 * postpone the cpu offline process to at least another second
 	 */
-	if (cpus_cpufreq_work() && !boosted)
-	{
-		stats.timestamp = ktime_to_us(ktime_get());
-	}
+	if (cpufreq_quick_get(cpu) >= t->cpufreq_unplug_limit
+			&& !boosted)
+		stats.timestamp[cpu - 2] = ktime_to_us(ktime_get());
 
 	/*
 	 * Let's not unplug this cpu unless its been online for longer than
 	 * 1sec to avoid consecutive ups and downs if the load is varying
 	 * closer to the threshold point.
 	 */
-	if (t->min_time_cpu_online > 1)
-    {
+	if (unlikely(t->min_time_cpu_online > 1))
 		extra_time = t->min_time_cpu_online * MIN_CPU_UP_US;
-    }
-    
-	if (ktime_to_us(ktime_get()) < stats.timestamp + extra_time)
-    {
+
+	if (ktime_to_us(ktime_get()) < stats.timestamp[cpu - 2] + extra_time)
 		return;
-    }
-    
-	cpus_offline_work();
+
+	if (stats.counter[cpu - 2] >= t->high_load_counter)
+		return;
+
+	cpu_down(cpu);
 
 	stats.online_cpus = num_online_cpus();
 
 	/*
 	 * reset the counter yo
 	 */
-	stats.counter = 0;
+	stats.counter[cpu - 2] = 0;
 }
 
 static void __ref decide_hotplug_func(struct work_struct *work)
 {
-    struct hotplug_tunables *t = &tunables;
-	unsigned int cur_load = 0;
-    unsigned int cpu;
+	unsigned int cpu;
+	unsigned int cur_load;
+	struct hotplug_tunables *t = &tunables;
 
 	/*
 	 * reschedule early when the system has woken up from the FREEZER but the
 	 * display is not on
 	 */
 	if (unlikely(stats.online_cpus == 1))
-    {
 		goto reschedule;
-    }
 
 	/*
 	 * reschedule early when the user doesn't want more than 2 cores online
 	 */
 	if (unlikely(t->load_threshold == 100 && stats.online_cpus == 2))
-    {
 		goto reschedule;
-    }
 
 	/*
 	 * reschedule early when users to run with all cores online
 	 */
 	if (unlikely(!t->load_threshold && stats.online_cpus == NUM_POSSIBLE_CPUS))
-    {
 		goto reschedule;
-    }
 
 	for (cpu = 0; cpu < 2; cpu++)
 	{
-		cur_load += cpufreq_quick_get_util(cpu);
-	}
-    
-    if (cur_load >= (t->load_threshold * 2))
-	{
-		if (stats.counter < t->max_load_counter)
-			++stats.counter;
-		
-		if (stats.online_cpus < NUM_POSSIBLE_CPUS)
-			cpu_revive(cur_load);
-	}
-	else
-	{
-		if (stats.counter)
-			--stats.counter;
+		cur_load = cpufreq_quick_get_util(cpu);
 
-		if (stats.online_cpus > 2)
-			cpu_smash();
-    }
+		if (cur_load >= t->load_threshold)
+		{
+			if (stats.counter[cpu] < t->max_load_counter)
+				++stats.counter[cpu];
+
+			if (stats.online_cpus < NUM_POSSIBLE_CPUS)
+				cpu_revive(stats.online_cpus, cur_load);
+		}
+		else
+		{
+			if (stats.counter[cpu])
+				--stats.counter[cpu];
+
+			if (stats.online_cpus > 2)
+				cpu_smash(stats.online_cpus - 1);
+		}
+	}
 
 reschedule:
     queue_delayed_work_on(0, wq, &decide_hotplug, msecs_to_jiffies(t->timer * HZ));
@@ -258,8 +222,6 @@ reschedule:
 static void mako_hotplug_suspend(struct work_struct *work)
 {
 	int cpu;
-
-	pr_info("%s: suspend\n", MAKO_HOTPLUG);
 
 	stats.counter[0] = 0;
 	stats.counter[1] = 0;
@@ -511,9 +473,8 @@ static int __devinit mako_hotplug_probe(struct platform_device *pdev)
 	t->min_time_cpu_online = DEFAULT_MIN_TIME_CPU_ONLINE;
 	t->timer = DEFAULT_TIMER;
 
-	stats.timestamp[0] = jiffies;
-	stats.timestamp[1] = jiffies;
-
+	stats.timestamp[0] = ktime_to_us(ktime_get());
+	stats.timestamp[1] = ktime_to_us(ktime_get());
 	stats.notif.notifier_call = lcd_notifier_callback;
 
 	if (lcd_register_client(&stats.notif))
