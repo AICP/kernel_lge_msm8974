@@ -179,42 +179,37 @@ static void __ref decide_hotplug_func(struct work_struct *work)
 			if (likely(stats.counter[cpu] < t->max_load_counter))
 				stats.counter[cpu] += 2;
 
-			if (cpu_is_offline(cpu_nr) 
-					&& stats.counter[cpu] >= t->high_load_counter)
-				cpu_revive(cpu_nr);
-		}
+		goto reschedule;
+	}
 
-		else
-		{
-			if (stats.counter[cpu])
-				--stats.counter[cpu];
+	/*
+	 * reschedule early when users to run with all cores online
+	 */
+	if (unlikely(!t->load_threshold && stats.online_cpus == NUM_POSSIBLE_CPUS))
+	{
+		goto reschedule;
+	}
 
-			if (cpu_online(cpu_nr) && stats.counter[cpu] < t->high_load_counter)
-			{
-				/* 
-				 * offline the cpu only if its freq is lower than
-				 * CPUFREQ_UNPLUG_LIMIT. Else fill the counter so that this cpu
-				 * stays online at least 5 more samples (time depends on the
-				 * sample timer period)
-				 */
-				cpufreq_get_policy(&policy, cpu_nr);
+	for (cpu = 0; cpu < 2; cpu++)
+	{
+		cur_load += cpufreq_quick_get_util(cpu);
+	}
 
-				freq_buf = policy.min;
+	if (cur_load >= (t->load_threshold * 2))
+	{
+		if (stats.counter < t->max_load_counter)
+			++stats.counter;
 
-				if (policy.min > t->cpufreq_unplug_limit)
-					freq_buf = t->cpufreq_unplug_limit;
+		if (stats.online_cpus < NUM_POSSIBLE_CPUS)
+			cpu_revive(cur_load);
+	}
+	else
+	{
+		if (stats.counter)
+			--stats.counter;
 
-				if (policy.cur > freq_buf)
-					stats.counter[cpu] = t->high_load_counter + 5;
-				else
-					cpu_smash(cpu_nr);
-			}
-		}
-
-		cpu_nr++;
-
-		if (cpu)
-			break;
+		if (stats.online_cpus > 2)
+			cpu_smash();
 	}
 
 reschedule:
