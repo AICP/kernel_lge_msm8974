@@ -38,11 +38,11 @@
 
 #define DEF_SAMPLING_MS			(268)
 
-#define DUAL_PERSISTENCE		(2500 / DEF_SAMPLING_MS)
-#define TRI_PERSISTENCE			(1700 / DEF_SAMPLING_MS)
-#define QUAD_PERSISTENCE		(1000 / DEF_SAMPLING_MS)
+#define DUAL_PERSISTENCE		(2800 / DEF_SAMPLING_MS)
+#define TRI_PERSISTENCE			(1800 / DEF_SAMPLING_MS)
+#define QUAD_PERSISTENCE		(1200 / DEF_SAMPLING_MS)
 
-#define BUSY_PERSISTENCE		(3500 / DEF_SAMPLING_MS)
+#define BUSY_PERSISTENCE		(3700 / DEF_SAMPLING_MS)
 
 static DEFINE_MUTEX(intelli_plug_mutex);
 
@@ -55,7 +55,7 @@ static struct workqueue_struct *intelliplug_boost_wq;
 static unsigned int intelli_plug_active = 1;
 module_param(intelli_plug_active, uint, 0644);
 
-static unsigned int touch_boost_active = 1;
+static unsigned int touch_boost_active = 0;
 module_param(touch_boost_active, uint, 0644);
 
 static unsigned int nr_run_profile_sel = 0;
