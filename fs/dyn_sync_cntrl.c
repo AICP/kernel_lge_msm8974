@@ -39,7 +39,7 @@ bool dyn_fsync_active __read_mostly = true;
 static ssize_t dyn_fsync_active_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%u\n", (dyn_fsync_active ? 1 : 0));
+	return sprintf(buf, "%u\n", (dyn_fsync_active ? 0 : 1));
 }
 
 static ssize_t dyn_fsync_active_store(struct kobject *kobj,
