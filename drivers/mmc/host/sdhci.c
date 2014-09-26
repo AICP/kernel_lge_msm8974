@@ -746,7 +746,7 @@ static u8 sdhci_calc_timeout(struct sdhci_host *host, struct mmc_command *cmd)
 	if (host->quirks & SDHCI_QUIRK_BROKEN_TIMEOUT_VAL)
 		return 0xE;
 #ifndef CONFIG_MACH_LGE
-	/* LGE_UPDATE, 2013/12/10, G2-KK-FS@lge.com */
+	/*                                          */
 	/* QCT Case : 01383733 TD: 135796/OFFICIAL EVENT */
 	/* we agree that below code is not appied */
 	/* Hardware Interrupt occurs, since Data Timeout is longer than hadware interrupt time */
@@ -1503,6 +1503,7 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	struct sdhci_host *host;
 	bool present;
 	unsigned long flags;
+	u32 tuning_opcode;
 
 	host = mmc_priv(mmc);
 
@@ -1541,9 +1542,9 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	/* If polling, assume that the card is always present. */
 	if (host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION)
 #ifdef CONFIG_MACH_LGE
-	/* LGE_UPDATE, 2013/07/19, G2-FS@lge.com
-	 * When sd doesn't exist physically, do finish tasklet-schedule.
-	 */
+	/*                                      
+                                                                 
+  */
 		{
 #ifndef CONFIG_MACH_MSM8974_B1_KR
 			if (mmc->index == 2)
@@ -2004,9 +2005,9 @@ static int sdhci_do_start_signal_voltage_switch(struct sdhci_host *host,
 			host->ops->check_power_status(host, REQ_BUS_OFF);
 
 		#ifdef CONFIG_MACH_LGE
-		/* LGU_UPDATE, 2013/07/17, G2-FS@lge.com
-		 * It maybe need more time.
-		 */
+		/*                                      
+                             
+   */
 		usleep_range(10000, 15000);
 		#else
 		/* Wait for 1ms as per the spec */
@@ -2038,9 +2039,9 @@ static int sdhci_start_signal_voltage_switch(struct mmc_host *mmc,
 	err = sdhci_do_start_signal_voltage_switch(host, ios);
 
 	#ifdef CONFIG_MACH_LGE
-	/* LGE_UPDATE, 2013/07/17, G2-FS@lge.com
-	 * When err is -EAGAIN, baby one more time.
-	 */
+	/*                                      
+                                            
+  */
 	if (err == -EAGAIN)
 	{
 		usleep_range(5000, 5500);
@@ -3694,3 +3695,4 @@ MODULE_LICENSE("GPL");
 
 MODULE_PARM_DESC(debug_quirks, "Force certain quirks.");
 MODULE_PARM_DESC(debug_quirks2, "Force certain other quirks.");
+
