@@ -896,12 +896,12 @@ static int eth_stop(struct net_device *net)
 		 * their own pace; the network stack can handle old packets.
 		 * For the moment we leave this here, since it works.
 		 */
-#ifdef CONFIG_USB_G_LGE_ANDROID_AUTORUN_VZW
-#else
+//#ifdef CONFIG_USB_G_LGE_ANDROID_AUTORUN_VZW
+//#else
 		in = link->in_ep->desc;
 		out = link->out_ep->desc;
 		usb_ep_disable(link->in_ep);
-#endif
+//#endif
 		usb_ep_disable(link->out_ep);
 		if (netif_carrier_ok(net)) {
 			if (config_ep_by_speed(dev->gadget, &link->func,
