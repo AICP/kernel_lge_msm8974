@@ -55,14 +55,17 @@ struct sound_control {
 	int default_headphones_value;
 	int default_speaker_value;
 	int default_mic_value;
+	int default_camera_mic_value;
 	struct snd_soc_codec *snd_control_codec;
 	bool playback_lock;
 	bool speaker_lock;
 	bool recording_lock;
+	bool camera_recording_lock;
 } soundcontrol = {
 	.playback_lock = false,
 	.speaker_lock = false,
 	.recording_lock = false,
+	.camera_recording_lock = false,
 };
 
 #define TAIKO_MAD_SLIMBUS_TX_PORT 12
@@ -4468,6 +4471,10 @@ static int reg_access(unsigned int reg)
 			if (soundcontrol.recording_lock)
 				ret = 0;
 			break;
+		case TAIKO_A_CDC_TX6_VOL_CTL_GAIN:
+			if (soundcontrol.camera_recording_lock)
+				ret = 0;
+			break;
 		default:
 			break;
 		}
@@ -7429,6 +7436,23 @@ void update_mic_gain(unsigned int vol_boost)
 		TAIKO_A_CDC_TX3_VOL_CTL_GAIN));
 }
 
+void update_camera_mic_gain(unsigned int vol_boost)
+{
+	int default_val = soundcontrol.default_mic_value;
+	int boosted_val = default_val + vol_boost;
+
+	pr_info("Sound Control: Camera mic default value %d\n", default_val);
+
+	soundcontrol.camera_recording_lock = false;
+	taiko_write(soundcontrol.snd_control_codec,
+		TAIKO_A_CDC_TX6_VOL_CTL_GAIN, boosted_val);
+	soundcontrol.camera_recording_lock = true;
+
+	pr_info("Sound Control: Boosted Mic value %d\n",
+		taiko_read(soundcontrol.snd_control_codec,
+		TAIKO_A_CDC_TX3_VOL_CTL_GAIN));
+}
+
 static int taiko_codec_probe(struct snd_soc_codec *codec)
 {
 	struct wcd9xxx *control;
@@ -7649,6 +7673,8 @@ static int taiko_codec_probe(struct snd_soc_codec *codec)
 		TAIKO_A_CDC_RX7_VOL_CTL_B2_CTL);
 	soundcontrol.default_mic_value = taiko_read(codec,
 		TAIKO_A_CDC_TX3_VOL_CTL_GAIN);
+	soundcontrol.default_camera_mic_value = taiko_read(codec,
+		TAIKO_A_CDC_TX6_VOL_CTL_GAIN);
 
 	return ret;
 
